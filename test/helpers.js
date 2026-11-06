@@ -75,8 +75,10 @@ export function packageTarball(dir, name, version, files = {}, pkgExtra = {}) {
     ...Object.entries(files).map(([rel, content]) => ({ name: `package/${rel}`, content })),
   ];
   const file = path.join(dir, `${name.replace(/^@/, '').replace('/', '-')}-${version}.tgz`);
-  const gz = zlib.gzipSync(makeTar(entries));
-  gz[9] = 3; // gzip "OS" byte differs per platform; fix it so tarballs are identical everywhere
+  // Byte-identical on every machine (the CI action test compares Linux, Windows and
+  // ARM macOS): level 0 avoids CPU-specific deflate paths, and the gzip "OS" byte is fixed.
+  const gz = zlib.gzipSync(makeTar(entries), { level: 0 });
+  gz[9] = 3;
   fs.writeFileSync(file, gz);
   return { file, integrity: sri(file), name, version };
 }
