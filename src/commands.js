@@ -5,6 +5,7 @@ import { capture, killTree, runCommand, shellJoin } from './exec.js';
 import { ensureTarballs } from './fetch.js';
 import { readJson, writeJson } from './fsx.js';
 import { findCulprit } from './bisect.js';
+import { explainCulprits, failingLocations } from './explain.js';
 import { ago, factorLabel, reasonText, t } from './i18n.js';
 import { downloadNode, findNodeDir, probeNode } from './runtime.js';
 import { redact, takeSnapshot, VERSION } from './snapshot.js';
@@ -173,9 +174,13 @@ function printDiff(say, diff, green) {
   };
   show(testable, 15);
   if (info.length) {
+    // Comparing with another machine: its PATH-like variables are noise, one line is enough.
+    const otherMachine = info.filter((g) => g.factor.kind === 'env' && g.factor.reason === 'other-machine');
+    const rest = info.filter((g) => !otherMachine.includes(g));
     say('');
     say(c.bold(t('untestable', info.reduce((n, g) => n + 1 + g.members.length, 0))));
-    show(info, 8);
+    show(rest, 8);
+    if (otherMachine.length) say(c.dim(`  ${pad(t('kind.env'), 13)}${t('otherMachineEnv', otherMachine.length)}`));
   }
 }
 
@@ -368,6 +373,14 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
 
   const testable = diff.factors.filter((f) => f.testable);
   const coupling = computeCoupling(green, current, diff.factors);
+  // Say plainly what could not be put back (download, integrity, Node version...).
+  const lost = diff.testable.filter((f) => !f.testable);
+  if (lost.length) {
+    say('');
+    say(c.yellow(`${sym.warn} ${t('lostFactors', lost.length)}`));
+    for (const f of lost.slice(0, 6)) say(c.yellow(`    ${factorLabel(f)}  (${reasonText(f)})`));
+    if (lost.length > 6) say(c.yellow(`    ${t('andMore', lost.length - 6)}`));
+  }
   if (!testable.length) {
     say('');
     say(c.yellow(t('nothingTestable')));
@@ -435,6 +448,8 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   say('');
   const culprit = (result.culprit ?? []).map((id) => testable.find((f) => f.id === id));
   const fixes = [];
+  const forward = [];
+  let explained = [];
   if (result.status === 'found') {
     const head = result.confirmed ? c.green(`${sym.ok} ${t(culprit.length > 1 ? 'culpritsConfirmed' : 'culpritConfirmed')}`) : c.yellow(`${sym.warn} ${t('culpritProbable')}`);
     say(c.bold(head));
@@ -458,16 +473,32 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     }
     const scripted = culprit.filter((f) => f.script);
     if (scripted.length && !opts.rebuild) say(c.yellow(`    ${sym.warn} ${t('scriptNote', scripted.map((f) => f.name).join(', '))}`));
+
+    // What to change: where it breaks in the user's code and what changed upstream.
+    explained = await explainCulprits(culprit, { root, current, output: failing, cacheDir: cache, offline: opts.offline, cwd });
+    printExplain(say, explained, culprit);
+
     for (const f of culprit) fixes.push(...fixLines(f, current.manager));
-    if (fixes.length) {
+    forward.push(...forwardLines(explained, culprit));
+    if (fixes.length || forward.length) {
       say('');
       say(c.bold(t('fix')));
+      if (fixes.length && forward.length) say(c.dim(`    ${t('fixBack')}`));
       for (const line of fixes) say(`    ${c.cyan(line)}`);
+      if (forward.length) {
+        say(c.dim(`    ${t('fixForwardLabel')}`));
+        for (const line of forward) say(`    ${c.cyan(line)}`);
+      }
     }
   } else if (result.status === 'not-reproduced') {
     say(c.yellow(`${sym.warn} ${t('notReproduced')}`));
   } else if (result.status === 'not-in-env') {
     say(c.yellow(`${sym.warn} ${t('notInEnv')}`));
+    const where = failingLocations(outputs.get(keyOf(new Set(ids))), root, 2, cwd);
+    if (where.length) {
+      say(c.bold(`  ${t('whereBreaks')}`));
+      for (const w of where) say(`    ${c.cyan(`${w.file}:${w.line}`)}  ${c.dim(w.code)}`);
+    }
     const scripted = testable.filter((f) => f.kind === 'package' && f.script);
     if (scripted.length && !opts.rebuild) {
       say(c.yellow(`  ${t('notInEnvScripts', scripted.map((f) => f.name).join(', '))}`));
@@ -482,7 +513,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   const restoredMsg = wrong.length ? c.red(`${sym.fail} ${t('restoreProblem', wrong.join(', '))}`) : c.green(t('restoredOk'));
   say(c.dim(`${t('runs', result.runs)} ${sym.dot} ${seconds(Date.now() - started)} ${sym.dot} `) + restoredMsg);
 
-  writeStepSummary({ result, culprit, fixes, command, green, diff, wrong, started });
+  writeStepSummary({ result, culprit, fixes, forward, explained, command, green, diff, wrong, started });
   if (json) {
     process.stdout.write(
       `${JSON.stringify(
@@ -491,6 +522,8 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
           confirmed: result.confirmed ?? false,
           culprit: culprit.map((f) => ({ kind: f.kind, name: f.name, change: f.change, from: f.from, to: f.to })),
           fix: fixes,
+          fixForward: forward,
+          explain: explained,
           runs: result.runs,
           durationMs: Date.now() - started,
           restored: wrong.length === 0,
@@ -504,7 +537,74 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
 }
 
 /** In GitHub Actions, add a readable report to the job summary page. */
-function writeStepSummary({ result, culprit, fixes, command, green, diff, wrong, started }) {
+/** Human report of "what to change" under the culprit. */
+function printExplain(say, explained, culprit) {
+  if (!explained.length) return;
+  const where = explained[0].where ?? [];
+  if (where.length) {
+    say('');
+    say(c.bold(`  ${t('whereBreaks')}`));
+    for (const w of where) say(`    ${c.cyan(`${w.file}:${w.line}`)}  ${c.dim(w.code)}`);
+  }
+  for (const e of explained) {
+    const f = culprit.find((x) => x.id === e.id);
+    if (e.imports?.length) {
+      say('');
+      say(c.bold(`  ${t('howYouUseIt', f.name)}`));
+      for (const u of e.imports) say(`    ${c.cyan(`${u.file}:${u.line}`)}  ${c.dim(u.code)}`);
+    }
+    if (e.notes?.items?.length) {
+      say('');
+      say(c.bold(`  ${t('whatChanged', `${f.name} ${f.from} → ${f.to}`, t(`source.${e.notes.source}`))}`));
+      for (const n of e.notes.items) say(`    ${c.dim(pad(n.version, 9))}${n.breaking ? c.yellow(`${sym.warn} `) : '  '}${n.text}`);
+      if (e.notes.url) say(c.dim(`    ${sym.arrow} ${e.notes.url}`));
+    } else if (e.notes?.url) {
+      say('');
+      say(c.dim(`  ${t('notesAt', f.name, e.notes.url)}`));
+    }
+    if (e.requiredBy?.length) {
+      say(c.dim(`  ${t('requiredBy', f.name, e.requiredBy.map((r) => `${r.name}@${r.version} (${r.range})`).join(', '))}`));
+    }
+    if (e.node?.deprecations?.length) {
+      say('');
+      say(c.bold(`  ${t('whatChangedNode', f.from, f.to)}`));
+      for (const d of e.node.deprecations) {
+        say(`    ${c.yellow(d.id)} ${d.title}${d.type ? c.dim(` · ${d.type}`) : ''}`);
+        say(`      ${d.text}`);
+        say(c.dim(`      ${sym.arrow} ${d.url}`));
+      }
+    } else if (e.node?.changelogs?.length) {
+      say('');
+      say(c.dim(`  ${t('nodeChangelogs', f.from, f.to)}`));
+      for (const url of e.node.changelogs.slice(-3)) say(c.dim(`    ${sym.arrow} ${url}`));
+    }
+    if (e.usages?.length) {
+      say('');
+      say(c.bold(`  ${t('whereEnvRead', f.name)}`));
+      for (const u of e.usages) say(`    ${c.cyan(`${u.file}:${u.line}`)}  ${c.dim(u.code)}`);
+    }
+  }
+}
+
+/** The "move forward" fix: adapt the code to the new version instead of pinning the old one. */
+function forwardLines(explained, culprit) {
+  const out = [];
+  for (const e of explained) {
+    const f = culprit.find((x) => x.id === e.id);
+    const loc = e.where?.[0] ? `${e.where[0].file}:${e.where[0].line}` : null;
+    if (f.kind === 'package' && f.change === 'changed' && (loc || e.notes?.items?.length)) {
+      out.push(loc ? t('fwdPackage', loc, f.name, f.to) : t('fwdPackageNoLoc', f.name, f.to));
+    }
+    if (f.kind === 'node') {
+      for (const d of e.node?.deprecations ?? []) if (d.migration) out.push(d.migration);
+      if (loc) out.push(t('fwdNode', loc, f.to));
+    }
+    if (f.kind === 'env' && f.change !== 'added' && e.usages?.length) out.push(t('fwdEnv', `${e.usages[0].file}:${e.usages[0].line}`, f.name));
+  }
+  return out;
+}
+
+function writeStepSummary({ result, culprit, fixes, forward = [], explained = [], command, green, diff, wrong, started }) {
   const file = process.env.GITHUB_STEP_SUMMARY;
   if (!file) return;
   const code = (text) => '`' + String(text).replace(/`/g, "'") + '`';
@@ -512,7 +612,18 @@ function writeStepSummary({ result, culprit, fixes, command, green, diff, wrong,
   if (result.status === 'found') {
     const title = culprit.length > 1 ? 'culpritsConfirmed' : result.confirmed ? 'culpritConfirmed' : 'culpritProbable';
     md.push(`${result.confirmed ? '✅' : '⚠️'} **${t(title)}** ${culprit.map((f) => code(factorLabel(f))).join(', ')}`);
-    if (fixes.length) md.push('', `**${t('fix')}:**`, '', '```', ...fixes, '```');
+    const where = explained[0]?.where ?? [];
+    if (where.length) md.push('', `**${t('whereBreaks')}**`, '', ...where.map((w) => `- ${code(`${w.file}:${w.line}`)} ${code(w.code)}`));
+    for (const e of explained) {
+      const f = culprit.find((x) => x.id === e.id);
+      if (e.notes?.items?.length) {
+        md.push('', `**${t('whatChanged', `${f.name} ${f.from} → ${f.to}`, t(`source.${e.notes.source}`))}**`, '');
+        for (const n of e.notes.items) md.push(`- ${n.breaking ? '⚠️ ' : ''}${n.version}: ${n.text}`);
+        if (e.notes.url) md.push('', e.notes.url);
+      }
+      for (const d of e.node?.deprecations ?? []) md.push('', `**${d.id}** ${code(d.title)} (${d.type}): ${d.text} ${d.url}`);
+    }
+    if (fixes.length) md.push('', `**${t('fix')}:**`, '', '```', ...fixes, ...forward, '```');
   } else if (result.status === 'not-in-env') {
     md.push(`⚠️ ${t('notInEnv')}`);
   } else if (result.status === 'not-reproduced') {

@@ -8,6 +8,10 @@ First public release.
   version, package manager, behavioural env vars, config files and git state.
 - `lastgreen why` finds and confirms, in both directions, the change that broke
   the tests, with delta debugging and dependency-aware coupling (semver ranges).
+- "What to change": the failing line in your code (Node, vitest and jest stack
+  formats), how your code imports the package, what changed upstream (its
+  CHANGELOG or GitHub release notes, ranked by relevance to the error), and for
+  Node.js the official deprecation with its replacement and codemod.
 - npm (hidden lockfile, nested `node_modules`) and pnpm (link graph, recreating
   versions pnpm already deleted).
 - Node.js versions from nvm, nvm-windows, fnm, volta, mise, asdf, n, or

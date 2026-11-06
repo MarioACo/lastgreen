@@ -8,7 +8,8 @@
 ### `git bisect` for your environment
 
 Your tests passed yesterday. Today they fail and nobody touched the code.<br>
-lastgreen finds the dependency, Node version or env var that broke them, and **proves it**.
+lastgreen finds the dependency, Node version or env var that broke them, **proves it**,<br>
+and shows the line to change.
 
 [![CI](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml/badge.svg)](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/lastgreen?color=2da44e&label=npm)](https://www.npmjs.com/package/lastgreen)
@@ -20,7 +21,7 @@ lastgreen finds the dependency, Node version or env var that broke them, and **p
 
 <img src="assets/demo.svg" alt="lastgreen why: 13 changes after an npm install, 7 runs, culprit confirmed: chalk 4.1.2 → 5.3.0" width="900">
 
-<sub>A real session: real npm registry packages, real output.</sub>
+<sub>A real session, abridged: real npm registry packages, real output.</sub>
 
 </div>
 
@@ -83,6 +84,31 @@ That's it. To record every green run automatically, wrap your test script:
    pnpm could have installed.
 5. **Proved in both directions.** Undoing only the culprit must make it pass and
    keeping only the culprit must make it fail. If not, it says so instead of guessing.
+6. **What to change, not only what to pin.** It shows the line where your code
+   breaks and the line that imports the package. Then it shows what changed
+   upstream, read from the package's CHANGELOG or its GitHub release notes,
+   with the notes that match your error first. For Node.js it shows the
+   official deprecation (DEP code, replacement and automated codemod when there
+   is one). You get two fixes: go back now, or move forward.
+
+```text
+  Where it breaks in your code
+    src/report.js:7  const byDay = _.groupBy(valid, (o) => format(o.date, 'yyyy-MM-dd'));
+
+  How your code uses date-fns
+    src/report.js:1  const format = require('date-fns/format');
+
+  What changed in date-fns 2.30.0 → 3.6.0 (its CHANGELOG)
+    3.0.0  ⚠ BREAKING: Now all file content's exported via named exports instead of
+             `export default`, which will require change direct imports i.e.
+             `const addDays = require('date-fns/addDays')` to `const { addDays } = require(...)`
+
+Fix
+    to go back now:     npm install --save-exact date-fns@2.30.0
+    or to move forward: update src/report.js:7 for date-fns 3.6.0
+```
+
+<sub>Real output from a vitest project after an `npm update` that changed 61 packages (6 runs, 30 s).</sub>
 
 ## Why not just…
 
@@ -92,7 +118,9 @@ That's it. To record every green run automatically, wrap your test script:
 - **…diff the lockfile?** You get 200 changed lines and no answer. Which one
   matters, and does reverting it actually fix it?
 - **…ask my AI agent?** It reads the error and guesses. lastgreen runs the
-  experiment and confirms. Better: give the agent lastgreen as a [tool](#ai-agents-mcp).
+  experiment and confirms. Better: give the agent lastgreen as a
+  [tool](#ai-agents-mcp). With the confirmed culprit, the failing line and the
+  breaking-change note, the agent can make the right fix instead of a plausible one.
 - **…use Docker/Nix so nothing drifts?** Great if you can. Most projects can't
   pin everything, and when they do, CI images and Node versions still move.
 
@@ -164,8 +192,11 @@ args = ["-y", "lastgreen", "mcp"]
 
 ## Privacy
 
-Snapshots stay in `.lastgreen/`, which git ignores automatically. Nothing is sent
-anywhere. Environment variables are stored as a short SHA-256 hash. Clear values
+Snapshots stay in `.lastgreen/`, which git ignores automatically. Nothing about
+your project is sent anywhere: lastgreen only downloads public data (old package
+tarballs from your registry, Node.js builds, release notes from GitHub and
+Node's deprecation list), and `--offline` turns all of it off. Environment
+variables are stored as a short SHA-256 hash. Clear values
 are kept only for a short allowlist of non-secret behavioural variables
 (`NODE_OPTIONS`, `NODE_ENV`, `TZ`, `LANG`, `CI`…), and never for anything whose
 name looks like a secret. `.env` files are hashed, never copied. `lastgreen
@@ -225,15 +256,28 @@ Project config (optional) in `.lastgreenrc.json` or a `"lastgreen"` key in
 
 ## lastgreen for teams
 
-The CLI, the GitHub Action and the MCP server are free and MIT, forever.
+The CLI, the GitHub Action and the MCP server are free and MIT, forever. One
+developer has everything they need.
 
-For teams we're building the hosted part, the things a single developer doesn't need:
+A team has problems one person doesn't: ten laptops and a CI drifting apart, the
+same breaking upgrade hitting five repos, nobody knowing what all of it costs.
+That's what the hosted version is for:
 
-- **Zero setup:** the green baseline of every repo and branch kept for you.
-- **A PR comment with the confirmed culprit** when CI breaks without a code change.
-- **Drift view:** which laptops and CI runners moved away from the green baseline,
-  before they break.
-- **History:** how often the environment broke the build and how long it took to fix it.
+- **Stop it before it breaks.** Laptops and CI runners report their fingerprint
+  (opt-in). You see who is on another Node, whose `node_modules` no longer matches
+  the lockfile, and which upgrade is about to land, before anyone loses an afternoon.
+- **Fix it once for every repo.** When an upgrade is confirmed to break something,
+  every other repo that uses that package is warned, with the line to change and
+  the release note.
+- **The answer inside the pull request.** When CI goes red without a code change,
+  the confirmed culprit, the failing line and both fixes appear as a comment.
+  Nobody has to run anything.
+- **Know what it costs.** A monthly report: how often the environment broke the
+  build, how long it took to fix, how much time lastgreen saved.
+
+**Example:** 10 developers. The environment breaks the build twice a month and
+finding the cause takes 2 hours each time: 4 developer-hours a month, every month.
+lastgreen Team for those 10 people: $80 a month.
 
 Free for open source and individuals. For private repositories of organizations
 it's planned at **$8 per active committer per month** (counted like GitHub: people

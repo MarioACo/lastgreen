@@ -75,7 +75,9 @@ export function packageTarball(dir, name, version, files = {}, pkgExtra = {}) {
     ...Object.entries(files).map(([rel, content]) => ({ name: `package/${rel}`, content })),
   ];
   const file = path.join(dir, `${name.replace(/^@/, '').replace('/', '-')}-${version}.tgz`);
-  fs.writeFileSync(file, zlib.gzipSync(makeTar(entries)));
+  const gz = zlib.gzipSync(makeTar(entries));
+  gz[9] = 3; // gzip "OS" byte differs per platform; fix it so tarballs are identical everywhere
+  fs.writeFileSync(file, gz);
   return { file, integrity: sri(file), name, version };
 }
 

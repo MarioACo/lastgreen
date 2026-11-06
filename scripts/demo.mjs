@@ -38,10 +38,19 @@ const SCRIPT = [
   ['out', [S('  #7  ', C.dim), S('✓ pass', C.green), S('   all except: chalk')], 0.45],
   ['gap', [], 0.2],
   ['out', [S('✓ Culprit confirmed: ', C.green, true), S('chalk 4.1.2 → 5.3.0', C.white, true)], 0.5],
-  ['out', [S('  undoing it also puts back the 5 dependencies the old version needs', C.dim)], 0.3],
-  ['out', [S('  Failure with this change: ', C.dim), S('TypeError: chalk.green is not a function', C.fg)], 0.3],
-  ['out', [S('  Fix  ', C.white, true), S('npm install --save-exact chalk@4.1.2', C.cyan)], 0.4],
-  ['out', [S('7 runs · 3.6 s · node_modules restored and verified', C.green)], 0.4],
+  ['out', [S('  undoing only this makes `npm test` pass; keeping only this makes it fail', C.dim)], 0.3],
+  ['gap', [], 0.1],
+  ['out', [S('  Where it breaks in your code', C.white, true)], 0.5],
+  ['out', [S('    test.js:5', C.cyan), S("  console.log(chalk.green('ok: ') + 'colors work');", C.dim)], 0.3],
+  ['out', [S('  How your code uses chalk', C.white, true)], 0.4],
+  ['out', [S('    test.js:1', C.cyan), S("  const chalk = require('chalk');", C.dim)], 0.3],
+  ['out', [S('  What changed in chalk 4.1.2 → 5.3.0', C.white, true), S(' (GitHub release notes)', C.dim)], 0.5],
+  ['out', [S('    5.0.0  ', C.dim), S('⚠ ', C.yellow), S('This package is now pure ESM. Please read this.')], 0.3],
+  ['out', [S('    5.0.0  ', C.dim), S('⚠ ', C.yellow), S('Move some properties off the default export to named exports')], 0.3],
+  ['gap', [], 0.1],
+  ['out', [S('Fix', C.white, true), S('   to go back now:   ', C.dim), S('npm install --save-exact chalk@4.1.2', C.cyan)], 0.5],
+  ['out', [S('      or to move forward: ', C.dim), S('update test.js:5 for chalk 5.3.0', C.cyan)], 0.3],
+  ['out', [S('7 runs · 4.0 s · node_modules restored and verified', C.green)], 0.4],
 ];
 const HOLD = 6; // seconds the final screen stays
 const TYPE = 0.035; // seconds per typed character
@@ -138,16 +147,18 @@ if (vi !== -1) {
   if (!edge) throw new Error('Edge/Chrome not found');
   // Change points: every moment something new appears.
   const points = [0, ...timeline.flatMap((l) => (l.chars ? [l.at, ...l.chars.filter((_, i) => i % 2 === 1).map((c) => c.at)] : [l.at]))].sort((a, b) => a - b);
-  const VW = 1280;
-  const VH = 720;
-  const scale = Math.min((VW - 80) / W, (VH - 120) / H);
+  // 4:5 portrait: what LinkedIn and X show best in a phone feed.
+  const VW = 1080;
+  const VH = 1350;
+  const scale = Math.min((VW - 60) / W, (VH - 230) / H);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'lg-edge-'));
   const list = [];
   points.forEach((at, i) => {
     const svg = frame(at + 0.0005);
-    const html = `<!doctype html><html><body style="margin:0;width:${VW}px;height:${VH}px;background:radial-gradient(circle at 30% 20%,#1b2a1f,#0b0f14 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Segoe UI,Helvetica,Arial,sans-serif">
-<div style="color:#f0f6fc;font-size:30px;font-weight:700;margin-bottom:6px">lastgreen <span style="color:#3fb950">— git bisect for your environment</span></div>
-<div style="color:#8b949e;font-size:17px;margin-bottom:18px">It passed yesterday. Today it fails. Which change broke it? Found and confirmed.</div>
+    const html = `<!doctype html><html><body style="margin:0;width:${VW}px;height:${VH}px;background:radial-gradient(circle at 30% 15%,#1b2a1f,#0b0f14 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Segoe UI,Helvetica,Arial,sans-serif">
+<div style="color:#f0f6fc;font-size:46px;font-weight:700;margin-bottom:8px">last<span style="color:#3fb950">green</span></div>
+<div style="color:#c9d1d9;font-size:25px;margin-bottom:6px">It passed yesterday. Today it fails.</div>
+<div style="color:#8b949e;font-size:21px;margin-bottom:26px">Which change broke it, where, and what to change. Proved.</div>
 <div style="width:${W * scale}px;height:${H * scale}px;box-shadow:0 20px 60px rgba(0,0,0,.6);border-radius:12px">${svg.replace('<svg ', `<svg style="width:${W * scale}px;height:${H * scale}px" `)}</div>
 </body></html>`;
     const htmlFile = path.join(framesDir, `f${String(i).padStart(4, '0')}.html`);

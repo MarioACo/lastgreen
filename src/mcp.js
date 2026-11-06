@@ -93,7 +93,7 @@ export async function callTool(name, args = {}, baseCwd = process.cwd()) {
       json = JSON.parse(r.out);
     } catch {}
     if (!json) return { isError: true, text: tail(r.err || r.out) || `lastgreen exited with code ${r.code}` };
-    return { isError: false, text: `${tail(r.err, 25)}\n\n${JSON.stringify(json, null, 2)}`, json };
+    return { isError: false, text: `${tail(r.err, 60)}\n\n${JSON.stringify(json, null, 2)}`, json };
   }
   return { isError: true, text: `Unknown tool ${name}` };
 }

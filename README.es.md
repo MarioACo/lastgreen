@@ -8,7 +8,8 @@
 ### `git bisect` para tu entorno
 
 Ayer tus pruebas pasaban. Hoy fallan y nadie tocó el código.<br>
-lastgreen encuentra la dependencia, la versión de Node o la variable que las rompió, y **lo demuestra**.
+lastgreen encuentra la dependencia, la versión de Node o la variable que las rompió, **lo demuestra**<br>
+y te muestra la línea que debes cambiar.
 
 [![CI](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml/badge.svg)](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/lastgreen?color=2da44e&label=npm)](https://www.npmjs.com/package/lastgreen)
@@ -20,7 +21,7 @@ lastgreen encuentra la dependencia, la versión de Node o la variable que las ro
 
 <img src="assets/demo.svg" alt="lastgreen why: 13 cambios tras un npm install, 7 ejecuciones, culpable confirmado: chalk 4.1.2 → 5.3.0" width="900">
 
-<sub>Una sesión real: paquetes reales del registro de npm, salida real.</sub>
+<sub>Una sesión real, resumida: paquetes reales del registro de npm, salida real.</sub>
 
 </div>
 
@@ -85,6 +86,31 @@ Eso es todo. Para guardar cada verde automáticamente, envuelve tu script de pru
 5. **Demostrado en las dos direcciones.** Deshacer solo al culpable debe hacer
    que pase, y dejar solo al culpable debe hacer que falle. Si no, lo dice en vez
    de adivinar.
+6. **Qué cambiar, no solo qué fijar.** Te muestra la línea donde falla tu código
+   y la línea que importa el paquete. Luego te dice qué cambió en el paquete,
+   leído de su CHANGELOG o de sus notas de versión en GitHub, con primero las
+   notas que coinciden con tu error. Para Node.js muestra la deprecación oficial
+   (código DEP, reemplazo y codemod automático si existe). Recibes dos arreglos:
+   volver ya o avanzar.
+
+```text
+  Dónde falla en tu código
+    src/report.js:7  const byDay = _.groupBy(valid, (o) => format(o.date, 'yyyy-MM-dd'));
+
+  Cómo usa tu código date-fns
+    src/report.js:1  const format = require('date-fns/format');
+
+  Qué cambió en date-fns 2.30.0 → 3.6.0 (su CHANGELOG)
+    3.0.0  ⚠ BREAKING: Now all file content's exported via named exports instead of
+             `export default`, which will require change direct imports i.e.
+             `const addDays = require('date-fns/addDays')` to `const { addDays } = require(...)`
+
+Arreglo
+    para volver ya:     npm install --save-exact date-fns@2.30.0
+    o para avanzar:     actualiza src/report.js:7 para date-fns 3.6.0
+```
+
+<sub>Salida real de un proyecto con vitest después de un `npm update` que cambió 61 paquetes (6 ejecuciones, 30 s).</sub>
 
 ## ¿Por qué no simplemente…
 
@@ -95,7 +121,9 @@ Eso es todo. Para guardar cada verde automáticamente, envuelve tu script de pru
   respuesta. ¿Cuál importa, y revertirla de verdad lo arregla?
 - **…preguntarle a mi agente de IA?** Lee el error y adivina. lastgreen hace el
   experimento y lo confirma. Mejor aún: dale lastgreen al agente como
-  [herramienta](#agentes-de-ia-mcp).
+  [herramienta](#agentes-de-ia-mcp). Con el culpable confirmado, la línea que
+  falla y la nota del cambio incompatible, el agente hace el arreglo correcto y
+  no solo uno que parece correcto.
 - **…usar Docker o Nix para que nada se mueva?** Excelente si puedes. La mayoría
   de los proyectos no pueden fijarlo todo, y aun así las imágenes de CI y las
   versiones de Node cambian.
@@ -170,7 +198,10 @@ args = ["-y", "lastgreen", "mcp"]
 ## Privacidad
 
 Las huellas se quedan en `.lastgreen/`, que git ignora automáticamente. No se
-envía nada a ningún lado. Las variables de entorno se guardan como un hash
+envía nada de tu proyecto a ningún lado: lastgreen solo descarga datos públicos
+(versiones viejas de paquetes desde tu registro, versiones de Node.js, notas de
+versión de GitHub y la lista de deprecaciones de Node), y `--offline` lo apaga
+todo. Las variables de entorno se guardan como un hash
 SHA-256 corto; solo se guarda el valor de una lista corta de variables de
 comportamiento que no son secretas (`NODE_OPTIONS`, `NODE_ENV`, `TZ`, `LANG`,
 `CI`…), y nunca de nada cuyo nombre parezca un secreto. Los `.env` se resumen
@@ -231,16 +262,29 @@ Configuración opcional en `.lastgreenrc.json` o en la clave `"lastgreen"` de
 
 ## lastgreen para equipos
 
-La CLI, la GitHub Action y el servidor MCP son gratis y MIT, para siempre.
+La CLI, la GitHub Action y el servidor MCP son gratis y MIT, para siempre. Una
+persona sola tiene todo lo que necesita.
 
-Para equipos estamos construyendo la parte alojada, lo que una persona sola no necesita:
+Un equipo tiene problemas que una persona sola no tiene: diez laptops y un CI que
+se van separando, el mismo cambio incompatible pegándole a cinco repos, y nadie
+sabe cuánto cuesta todo eso. Para eso es la versión alojada:
 
-- **Cero configuración:** la huella verde de cada repo y rama, guardada por ti.
-- **Un comentario en el PR con el culpable confirmado** cuando CI se rompe sin
-  cambios de código.
-- **Vista de desviaciones:** qué laptops y qué runners de CI se alejaron del
-  verde, antes de que se rompan.
-- **Historial:** cuántas veces el entorno rompió el build y cuánto tardaron en arreglarlo.
+- **Detenerlo antes de que se rompa.** Las laptops y los runners de CI reportan
+  su huella (opcional). Ves quién está en otra versión de Node, a quién se le
+  desincronizó `node_modules` del lockfile y qué actualización está por llegar,
+  antes de que alguien pierda la tarde.
+- **Arreglarlo una vez para todos los repos.** Cuando se confirma que una
+  actualización rompe algo, se avisa a cada repo que usa ese paquete, con la
+  línea que hay que cambiar y la nota de la versión.
+- **La respuesta dentro del pull request.** Cuando CI se pone en rojo sin cambios
+  de código, el culpable confirmado, la línea que falla y los dos arreglos
+  aparecen como comentario. Nadie tiene que correr nada.
+- **Saber cuánto cuesta.** Un reporte mensual: cuántas veces el entorno rompió el
+  build, cuánto tardaron en arreglarlo y cuánto tiempo ahorró lastgreen.
+
+**Ejemplo:** 10 desarrolladores. El entorno rompe el build dos veces al mes y
+encontrar la causa toma 2 horas cada vez: 4 horas de desarrollo al mes, cada mes.
+lastgreen Team para esas 10 personas: 80 dólares al mes.
 
 Gratis para código abierto y personas. Para repos privados de organizaciones el
 plan es de **8 dólares por committer activo al mes** (contado como GitHub:
