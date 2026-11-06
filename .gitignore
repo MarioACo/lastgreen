@@ -1,0 +1,4 @@
+node_modules/
+.lastgreen/
+*.tgz
+lastgreen-export.json

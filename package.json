@@ -1,0 +1,44 @@
+{
+  "name": "lastgreen",
+  "version": "0.1.0",
+  "description": "git bisect for your environment: finds which dependency, Node version or env var broke your tests since the last green run.",
+  "type": "module",
+  "bin": {
+    "lastgreen": "bin/lastgreen.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "README.es.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "bisect",
+    "debugging",
+    "works-on-my-machine",
+    "environment",
+    "node_modules",
+    "dependencies",
+    "regression",
+    "delta-debugging",
+    "cli",
+    "ci"
+  ],
+  "author": "MarioACo (https://github.com/MarioACo)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MarioACo/lastgreen.git"
+  },
+  "homepage": "https://github.com/MarioACo/lastgreen#readme",
+  "bugs": {
+    "url": "https://github.com/MarioACo/lastgreen/issues"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,39 @@
+name: lastgreen for teams
+description: Tell us your team wants the hosted version (CI PR comments, green baseline of main, drift view)
+title: "[team] "
+labels: ["team-interest"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! This helps decide what to build first. Nothing here is a commitment.
+  - type: dropdown
+    id: size
+    attributes:
+      label: How many developers commit to your repos?
+      options: ["2-5", "6-20", "21-100", "100+"]
+    validations:
+      required: true
+  - type: dropdown
+    id: ci
+    attributes:
+      label: CI provider
+      multiple: true
+      options: ["GitHub Actions", "GitLab CI", "CircleCI", "Jenkins", "Azure Pipelines", "Other"]
+  - type: dropdown
+    id: pm
+    attributes:
+      label: Package manager
+      multiple: true
+      options: ["npm", "pnpm", "yarn", "bun"]
+  - type: textarea
+    id: pain
+    attributes:
+      label: The last time the environment (not the code) broke your build, what happened and how long did it take?
+    validations:
+      required: true
+  - type: dropdown
+    id: pay
+    attributes:
+      label: Would your team pay for this?
+      options: ["Yes, if it saves us that time", "Maybe, depends on price", "Only if free"]
