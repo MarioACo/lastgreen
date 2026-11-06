@@ -1,5 +1,5 @@
-name: lastgreen
-description: Keep the green environment of your default branch and, when CI breaks without a code change, find and confirm the change that did it.
+name: lastgreen bisect
+description: When CI breaks and the code did not change, find and prove which dependency, Node version or env var did it.
 author: MarioACo
 branding:
   icon: git-commit
