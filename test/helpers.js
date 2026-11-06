@@ -22,7 +22,7 @@ export function tarHeader(name, size, { type = '0', mode = 0o644 } = {}) {
   h.write('0000000\0', 108, 8, 'ascii');
   h.write('0000000\0', 116, 8, 'ascii');
   h.write(`${size.toString(8).padStart(11, '0')}\0`, 124, 12, 'ascii');
-  h.write(`${Math.floor(Date.now() / 1000).toString(8).padStart(11, '0')}\0`, 136, 12, 'ascii');
+  h.write(`${(1_700_000_000).toString(8).padStart(11, '0')}\0`, 136, 12, 'ascii'); // fixed mtime: reproducible tarballs
   h.write('        ', 148, 8, 'ascii');
   h.write(type, 156, 1, 'ascii');
   h.write('ustar\0', 257, 6, 'ascii');
@@ -151,4 +151,34 @@ export function versionOnDisk(root, key) {
   } catch {
     return null;
   }
+}
+
+function link(target, at) {
+  fs.mkdirSync(path.dirname(at), { recursive: true });
+  if (process.platform === 'win32') fs.symlinkSync(target, at, 'junction');
+  else fs.symlinkSync(path.relative(path.dirname(at), target), at);
+}
+
+/**
+ * Lay node_modules out exactly like pnpm does (isolated linker), from scratch.
+ * @param {{instances: Record<string, {tar: {file: string, name: string, version: string, integrity: string}, links?: Record<string, string>}>, root: Record<string, string>, hoisted?: Record<string, string>}} layout
+ */
+export async function installPnpm(root, { instances, root: rootLinks, hoisted = {} }) {
+  const nm = path.join(root, 'node_modules');
+  fs.rmSync(nm, { recursive: true, force: true });
+  const store = path.join(nm, '.pnpm');
+  const pkgDir = (dir) => path.join(store, dir, 'node_modules', ...instances[dir].tar.name.split('/'));
+  for (const dir of Object.keys(instances)) await extractTarball(instances[dir].tar.file, pkgDir(dir), { strip: 1 });
+  for (const [dir, inst] of Object.entries(instances)) {
+    for (const [dep, target] of Object.entries(inst.links ?? {})) link(pkgDir(target), path.join(store, dir, 'node_modules', ...dep.split('/')));
+  }
+  for (const [name, dir] of Object.entries(rootLinks)) link(pkgDir(dir), path.join(nm, ...name.split('/')));
+  for (const [name, dir] of Object.entries(hoisted)) link(pkgDir(dir), path.join(store, 'node_modules', ...name.split('/')));
+  const lines = ["lockfileVersion: '9.0'", '', 'importers:', '', '  .:', '    dependencies: {}', '', 'packages:', ''];
+  for (const inst of Object.values(instances)) {
+    lines.push(`  ${inst.tar.name.startsWith('@') ? `'${inst.tar.name}@${inst.tar.version}'` : `${inst.tar.name}@${inst.tar.version}`}:`);
+    lines.push(`    resolution: {integrity: ${inst.tar.integrity}, tarball: file:${path.relative(root, inst.tar.file).split(path.sep).join("/")}}`, "");
+  }
+  fs.writeFileSync(path.join(store, 'lock.yaml'), lines.join('\n'));
+  fs.writeFileSync(path.join(nm, '.modules.yaml'), 'layoutVersion: 5\n');
 }

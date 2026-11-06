@@ -242,3 +242,4 @@ test('--rebuild runs the install script of a restored native package', async () 
   assert.equal(versionOnDisk(root, 'node_modules/native'), '1.1.0');
   assert.ok(fs.existsSync(path.join(root, 'node_modules', 'native', 'build', 'addon.js')), 'current build output kept');
 });
+

@@ -1,0 +1,49 @@
+name: Action self-test
+
+# Uses the action exactly like a user would: a green run on main saves the
+# baseline, then a broken run must find and confirm the culprit from it.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/action-demo.mjs good "$RUNNER_TEMP"
+      - uses: ./
+        id: lg
+        with:
+          command: node test.js
+          working-directory: ${{ runner.temp }}/demo
+      - run: test "${{ steps.lg.outputs.result }}" = "green"
+
+  broken:
+    needs: baseline
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: node scripts/action-demo.mjs bad "$RUNNER_TEMP"
+      - uses: ./
+        id: lg
+        continue-on-error: true
+        with:
+          command: node test.js
+          working-directory: ${{ runner.temp }}/demo
+      - name: The tests failed and lastgreen confirmed the culprit
+        shell: bash
+        run: |
+          echo "exit=${{ steps.lg.outputs.exit-code }} result=${{ steps.lg.outputs.result }}"
+          test "${{ steps.lg.outputs.exit-code }}" = "1"
+          test "${{ steps.lg.outputs.result }}" = "found"

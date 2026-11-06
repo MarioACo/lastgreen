@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import { exists, mkdirp, readJson, rename, rm, writeJson } from './fsx.js';
 import { keyToPath, nameFromKey } from './packages.js';
 import { npmCliFor } from './runtime.js';
+import { PnpmWorkspace } from './pnpm.js';
 import { extractTarball } from './tar.js';
 import { prependPath, setEnv } from './env.js';
 
@@ -41,6 +42,7 @@ export class Workspace {
       rm(journalPath);
       return { restored: 0 };
     }
+    if (journal.engine === 'pnpm') return PnpmWorkspace.recover(root, journalPath, journal);
     const ws = new Workspace(root, journalPath);
     for (const rec of journal.records ?? []) ws.records.set(rec.id, rec);
     return ws.restore();

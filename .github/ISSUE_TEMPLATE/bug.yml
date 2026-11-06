@@ -1,0 +1,28 @@
+name: Bug report
+description: lastgreen did something wrong or unexpected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output of `npx lastgreen why --show-output` (or the command that failed)
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: OS, Node.js version, package manager and version
+      placeholder: "Windows 11, Node 22.11.0, pnpm 9.15.0"
+    validations:
+      required: true
+  - type: checkboxes
+    id: restore
+    attributes:
+      label: node_modules
+      options:
+        - label: node_modules was left in a wrong state (please say so, it is the most important bug class)

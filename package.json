@@ -1,7 +1,7 @@
 {
   "name": "lastgreen",
   "version": "0.1.0",
-  "description": "git bisect for your environment: finds which dependency, Node version or env var broke your tests since the last green run.",
+  "description": "git bisect for your environment: finds and confirms which dependency, Node.js version or env var broke your tests since the last green run. npm, pnpm, CI and AI agents (MCP).",
   "type": "module",
   "bin": {
     "lastgreen": "bin/lastgreen.js"
@@ -9,9 +9,11 @@
   "files": [
     "bin",
     "src",
+    "action.yml",
     "README.md",
     "README.es.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20"
@@ -21,15 +23,21 @@
   },
   "keywords": [
     "bisect",
+    "git-bisect",
     "debugging",
     "works-on-my-machine",
-    "environment",
-    "node_modules",
-    "dependencies",
     "regression",
+    "dependencies",
+    "node_modules",
+    "npm",
+    "pnpm",
+    "node-version",
     "delta-debugging",
-    "cli",
-    "ci"
+    "ci",
+    "github-action",
+    "mcp",
+    "ai-agents",
+    "cli"
   ],
   "author": "MarioACo (https://github.com/MarioACo)",
   "repository": {

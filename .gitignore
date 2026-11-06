@@ -2,3 +2,6 @@ node_modules/
 .lastgreen/
 *.tgz
 lastgreen-export.json
+
+# launch drafts and media (not published)
+difusion/

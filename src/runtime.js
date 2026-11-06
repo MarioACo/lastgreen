@@ -46,7 +46,9 @@ export function npmVersionFor(nodePath) {
 
 export async function managerVersion(manager, env, cwd) {
   if (!manager || manager === 'npm') return null;
-  return capture(manager, ['--version'], { env, cwd, shell: process.platform === 'win32', timeoutMs: 15_000 });
+  // Windows needs the shell for .cmd shims; pass one command string so nothing is concatenated unescaped.
+  if (process.platform === 'win32') return capture(`${manager} --version`, [], { env, cwd, shell: true, timeoutMs: 15_000 });
+  return capture(manager, ['--version'], { env, cwd, timeoutMs: 15_000 });
 }
 
 export function nodeCandidates(version, env = process.env, cacheDir) {

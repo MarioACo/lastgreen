@@ -13,6 +13,7 @@ import { c, configureFor, createWriter, pad, seconds, sym } from './ui.js';
 import { prependPath } from './env.js';
 import { detectManager } from './packages.js';
 import { Workspace } from './workspace.js';
+import { PnpmWorkspace } from './pnpm.js';
 
 class UserError extends Error {}
 
@@ -192,9 +193,10 @@ function errorLines(text, root, count = 3) {
 function fixLines(f, manager) {
   const m = manager ?? 'npm';
   if (f.kind === 'package') {
+    const explain = { npm: 'npm explain', pnpm: 'pnpm why', yarn: 'yarn why', bun: 'npm explain' }[m];
     if (f.change === 'added') {
       const remove = { npm: 'npm uninstall', pnpm: 'pnpm remove', yarn: 'yarn remove', bun: 'bun remove' }[m];
-      return f.direct && !f.parent ? [`${remove} ${f.name}`] : [t('fixExplain', `npm explain ${f.name}`)];
+      return f.direct && !f.parent ? [`${remove} ${f.name}`] : [t('fixExplain', `${explain} ${f.name}`)];
     }
     if (f.direct && !f.parent) {
       const dev = f.direct === 'dev';
@@ -207,7 +209,7 @@ function fixLines(f, manager) {
       return [`${cmd}${f.name}@${f.from}`];
     }
     const field = { npm: 'overrides', bun: 'overrides', pnpm: 'pnpm.overrides', yarn: 'resolutions' }[m];
-    return [t('fixOverride', field, `"${f.name}": "${f.from}"`), t('fixExplain', `npm explain ${f.name}`)];
+    return [t('fixOverride', field, `"${f.name}": "${f.from}"`), t('fixExplain', `${explain} ${f.name}`)];
   }
   if (f.kind === 'node') {
     const v = f.from.replace(/^v/, '');
@@ -301,12 +303,24 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   prependPath(runEnv, path.join(root, 'node_modules', '.bin'));
   if (cwd !== root) prependPath(runEnv, path.join(cwd, 'node_modules', '.bin'));
   const cache = cacheDir();
-  const ws = new Workspace(root, store.journal, { rebuild: Boolean(opts.rebuild), nodePath: current.node?.path });
+  const pnpmMode = green.layout === 'pnpm' && current.layout === 'pnpm';
+  const ws = pnpmMode
+    ? new PnpmWorkspace(root, store.journal)
+    : new Workspace(root, store.journal, { rebuild: Boolean(opts.rebuild), nodePath: current.node?.path });
 
   // Prepare: old package versions and the old Node binary.
   const needs = [];
-  for (const f of diff.factors.filter((x) => x.testable && x.kind === 'package')) {
-    for (const p of f.paths) if (p.green) needs.push({ id: `${f.id}|${p.key}`, key: p.key, entry: p.green, factor: f });
+  if (pnpmMode) {
+    // Every old copy pnpm already deleted, owned by the package factor of its name.
+    const byName = new Map(diff.factors.filter((f) => f.pnpm && f.testable).map((f) => [f.name, f]));
+    for (const [key, entry] of Object.entries(green.packages)) {
+      const factor = key.startsWith('pnpm:') && !current.packages[key] ? byName.get(entry.name) : null;
+      if (factor) needs.push({ id: `${factor.id}|${key}`, key: key.slice(5), entry: { name: entry.name, version: entry.version, integrity: entry.integrity, resolved: entry.resolved }, factor });
+    }
+  } else {
+    for (const f of diff.factors.filter((x) => x.testable && x.kind === 'package')) {
+      for (const p of f.paths) if (p.green) needs.push({ id: `${f.id}|${p.key}`, key: p.key, entry: p.green, factor: f });
+    }
   }
   if (needs.length) {
     say('');
@@ -316,6 +330,18 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
       const r = got.get(need.id);
       if (r?.file) ws.setTarball(need.key, r.file);
       else if (need.factor.testable) [need.factor.testable, need.factor.reason] = [false, `fetch:${r?.error ?? 'unknown'}`];
+    }
+  }
+  if (pnpmMode) {
+    // An old copy can only come back if everything it links to can come back too.
+    const can = (dir, seen = new Set()) => {
+      if (current.packages[`pnpm:${dir}`] || seen.has(dir)) return true;
+      seen.add(dir);
+      if (!ws.tarballs.has(dir)) return false;
+      return Object.values(green.packages[`pnpm:${dir}`]?.links ?? {}).every((t2) => can(t2, seen));
+    };
+    for (const f of diff.factors.filter((x) => x.pnpm && x.testable)) {
+      if (!f.pnpm.green.every((d) => can(d))) [f.testable, f.reason] = [false, 'fetch:npm-pack'];
     }
   }
   const nodeFactor = diff.factors.find((f) => f.kind === 'node' && f.testable);
@@ -380,7 +406,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   let runNo = 0;
   let result;
   try {
-    ws.begin(testable);
+    ws.begin(testable, green, current);
     const firstGuess = testable[0].tags.includes('in-output') ? testable[0].id : null;
     result = await findCulprit(
       ids,

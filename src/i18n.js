@@ -88,6 +88,7 @@ const en = {
   'tag.in-output': 'named in the error',
   'tag.install-script': 'has install script',
   'tag.behavioural': 'affects runtime',
+  'tag.peers': 'peer dependencies changed',
   'reason.pnpm': 'pnpm layout: diff only for now',
   'reason.layout': 'package manager layout changed',
   'reason.platform': 'platform-specific package',
@@ -119,6 +120,7 @@ Usage
   npx lastgreen why --against file   "works on my machine": compare with theirs
   npx lastgreen log                list saved snapshots
   npx lastgreen restore            restore node_modules after an interrupted bisect
+  npx lastgreen mcp                MCP server for AI agents (Claude Code, Codex, Cursor)
 
 Options for why/diff
   -c, --command <cmd>   command to re-run (default: the one from the last green)
@@ -221,6 +223,7 @@ const es = {
   'tag.in-output': 'aparece en el error',
   'tag.install-script': 'tiene script de instalación',
   'tag.behavioural': 'afecta la ejecución',
+  'tag.peers': 'cambiaron sus peer dependencies',
   'reason.pnpm': 'estructura de pnpm: por ahora solo diferencias',
   'reason.layout': 'cambió la estructura del gestor de paquetes',
   'reason.platform': 'paquete de otra plataforma',
@@ -252,6 +255,7 @@ Uso
   npx lastgreen why --against archivo   "en mi máquina sí funciona": compara con el suyo
   npx lastgreen log                lista las huellas guardadas
   npx lastgreen restore            restaura node_modules tras una búsqueda interrumpida
+  npx lastgreen mcp                servidor MCP para agentes de IA (Claude Code, Codex, Cursor)
 
 Opciones de why/diff
   -c, --command <cmd>   comando a repetir (por defecto: el del último verde)

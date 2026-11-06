@@ -1,0 +1,95 @@
+name: lastgreen
+description: Keep the green environment of your default branch and, when CI breaks without a code change, find and confirm the change that did it.
+author: MarioACo
+branding:
+  icon: git-commit
+  color: green
+
+inputs:
+  command:
+    description: Test command to run, for example "npm test".
+    required: true
+  working-directory:
+    description: Folder of the project (the one with package.json).
+    default: .
+  baseline-branch:
+    description: Branch whose green runs become the baseline. Defaults to the repository default branch.
+    default: ''
+  github-token:
+    description: Token used to read the baseline artifact (needs actions:read).
+    default: ${{ github.token }}
+
+outputs:
+  result:
+    description: "green, found, not-in-env, not-reproduced, nothing-testable, no-changes, budget or no-baseline"
+    value: ${{ steps.why.outputs.status || steps.run.outputs.status }}
+  exit-code:
+    description: Exit code of the test command.
+    value: ${{ steps.run.outputs.code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run tests through lastgreen
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        LG: ${{ github.action_path }}/bin/lastgreen.js
+        CMD: ${{ inputs.command }}
+      run: |
+        set +e
+        node "$LG" --lang en run -- "$CMD"
+        code=$?
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+        if [ "$code" -eq 0 ]; then echo "status=green" >> "$GITHUB_OUTPUT"; else echo "status=red" >> "$GITHUB_OUTPUT"; fi
+        exit 0
+
+    - name: Save the green baseline
+      if: steps.run.outputs.code == '0' && github.ref_name == (inputs.baseline-branch || github.event.repository.default_branch)
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        LG: ${{ github.action_path }}/bin/lastgreen.js
+      run: node "$LG" --lang en export -o "$RUNNER_TEMP/lastgreen-baseline/lastgreen-baseline.json"
+
+    - name: Upload the green baseline
+      if: steps.run.outputs.code == '0' && github.ref_name == (inputs.baseline-branch || github.event.repository.default_branch)
+      uses: actions/upload-artifact@v4
+      with:
+        name: lastgreen-baseline
+        path: ${{ runner.temp }}/lastgreen-baseline/lastgreen-baseline.json
+        retention-days: 90
+        overwrite: true
+
+    - name: Explain the failure
+      id: why
+      if: steps.run.outputs.code != '0'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        LG: ${{ github.action_path }}/bin/lastgreen.js
+        GH_TOKEN: ${{ inputs.github-token }}
+        BRANCH: ${{ inputs.baseline-branch || github.event.repository.default_branch }}
+      run: |
+        dir="$RUNNER_TEMP/lastgreen-download"
+        mkdir -p "$dir"
+        id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=lastgreen-baseline&per_page=100" \
+          --jq "[.artifacts[] | select(.expired == false and .workflow_run.head_branch == \"$BRANCH\")] | sort_by(.created_at) | last | .id // empty" 2>/dev/null)
+        if [ -z "$id" ]; then
+          echo "status=no-baseline" >> "$GITHUB_OUTPUT"
+          printf '### lastgreen\n\nNo green baseline from `%s` yet. It is saved on the next green run there.\n' "$BRANCH" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$dir/baseline.zip"
+        unzip -o -q "$dir/baseline.zip" -d "$dir"
+        set +e
+        node "$LG" --lang en why --against "$dir/lastgreen-baseline.json" --json > "$dir/why.json"
+        status=$(node -e "try { console.log(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).status) } catch { console.log('error') }" "$dir/why.json")
+        echo "status=$status" >> "$GITHUB_OUTPUT"
+        exit 0
+
+    - name: Keep the test result
+      if: steps.run.outputs.code != '0'
+      shell: bash
+      run: exit ${{ steps.run.outputs.code }}

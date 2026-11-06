@@ -1,61 +1,52 @@
-# lastgreen
+<div align="center">
 
-**`git bisect` para tu entorno.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+  <img alt="lastgreen" src="assets/logo-light.svg" width="380">
+</picture>
 
-Ayer tus pruebas pasaban. Hoy fallan y no tocaste el código. Alguien corrió
-`npm update`, un agente de IA instaló algo, se actualizó Node, apareció una
-variable de entorno... `lastgreen` recuerda el entorno de cada ejecución que
-pasa y, cuando el mismo código empieza a fallar, devuelve las piezas viejas una
-por una hasta encontrar (y **confirmar**) el cambio que lo rompió.
+### `git bisect` para tu entorno
 
-> [Read in English](README.md)
+Ayer tus pruebas pasaban. Hoy fallan y nadie tocó el código.<br>
+lastgreen encuentra la dependencia, la versión de Node o la variable que las rompió, y **lo demuestra**.
 
-```text
-$ npx lastgreen why
-Último verde  hace 2 h · npm test · 447 ms
+[![CI](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml/badge.svg)](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/lastgreen?color=2da44e&label=npm)](https://www.npmjs.com/package/lastgreen)
+[![node](https://img.shields.io/badge/node-%E2%89%A520-2da44e)](#soporte)
+[![dependencias](https://img.shields.io/badge/dependencias-0-2da44e)](package.json)
+[![licencia](https://img.shields.io/badge/licencia-MIT-2da44e)](LICENSE)
 
-13 cambios desde entonces
-  paquete      chalk 4.1.2 → 5.3.0 (+5 dependencias suyas)  mayor, dependencia directa
-  paquete      debug 4.3.4 → 4.4.0  menor, dependencia directa
-  paquete      semver 7.5.4 → 7.6.3 (+2 dependencias suyas)  menor, dependencia directa
-  paquete      ms 2.1.2 → 2.1.3  parche, dependencia directa
+[Empezar](#empezar) · [Cómo funciona](#cómo-funciona) · [CI](#en-ci) · [Agentes de IA](#agentes-de-ia-mcp) · [Equipos](#lastgreen-para-equipos) · [English](README.md)
 
-Buscando al culpable entre 11 cambios con `npm test`
-  #1   ✗ falla      431 ms    entorno actual
-  #2   ✓ pasa       443 ms    entorno del último verde
-  #3   ✗ falla      449 ms    7 de 11 cambios
-  #4   ✗ falla      442 ms    4 de 11 cambios
-  #5   ✗ falla      438 ms    3 de 11 cambios
-  #6   ✗ falla      446 ms    solo: chalk 4.1.2 → 5.3.0
-  #7   ✓ pasa       435 ms    todo menos: chalk
+<img src="assets/demo.svg" alt="lastgreen why: 13 cambios tras un npm install, 7 ejecuciones, culpable confirmado: chalk 4.1.2 → 5.3.0" width="900">
 
-✓ Culpable confirmado:
-    chalk 4.1.2 → 5.3.0
-    deshacerlo también devuelve 5 dependencias que la versión vieja necesita: ansi-styles, supports-color, color-convert, has-flag y 1 más
-    deshacer solo esto hace que `npm test` pase; dejar solo esto lo hace fallar
+<sub>Una sesión real: paquetes reales del registro de npm, salida real.</sub>
 
-    Fallo con este cambio:
-      TypeError: chalk.green is not a function
+</div>
 
-Arreglo
-    npm install --save-exact chalk@4.1.2
+## El problema
 
-7 ejecuciones · 3.6 s · node_modules restaurado y verificado
-```
+El código que no cambió empieza a fallar porque cambió algo *alrededor*:
 
-Es una salida real, de un `npm install` real con paquetes reales del registro.
+- alguien corrió `npm update`, o un rango `^` agarró un parche nuevo
+- CI pasó a otra versión de Node.js, o alguien del equipo usa otra
+- un agente de IA instaló un paquete o puso una variable mientras "arreglaba" otra cosa
+- un `.env`, `NODE_OPTIONS` o `TZ` es distinto en esa máquina
+
+Lo normal es perder una tarde leyendo diffs del lockfile, reinstalando y
+preguntando "¿a ti te funciona?" en Slack. lastgreen hace el experimento por ti.
 
 ## Empezar
 
 ```bash
-# 1. Una vez, mientras tus pruebas pasan (o siempre, mira abajo)
+# 1. Mientras tus pruebas pasan, córrelas una vez con lastgreen (o siempre, mira abajo)
 npx lastgreen run -- npm test
 
 # 2. El día que se rompan
 npx lastgreen why
 ```
 
-Para guardar cada verde automáticamente, envuelve tu script de pruebas:
+Eso es todo. Para guardar cada verde automáticamente, envuelve tu script de pruebas:
 
 ```json
 {
@@ -64,71 +55,159 @@ Para guardar cada verde automáticamente, envuelve tu script de pruebas:
 }
 ```
 
-`lastgreen run` deja pasar intactos la salida y el código de salida de tu
-comando, y solo agrega una línea al final.
+`lastgreen run` deja pasar intactos la salida y el código de salida de tu comando, y solo agrega una línea al final.
 
-## Qué responde
-
-| Tú dices | Comando |
+| Tú dices | Tú corres |
 | --- | --- |
 | "Ayer funcionaba." | `lastgreen why` |
 | "¿Qué cambió desde que pasó?" (sin ejecutar nada) | `lastgreen diff` |
-| "En mi máquina sí funciona." | la otra persona corre `lastgreen export`; tú corres `lastgreen why --against lastgreen-export.json` |
-| CI / agentes de IA | `lastgreen why --json` |
+| "En mi máquina sí funciona." | la otra persona corre `lastgreen export`; tú, `lastgreen why --against lastgreen-export.json` |
+| "CI está en rojo y nadie cambió nada." | la [GitHub Action](#en-ci) |
+| "Agente, ¿por qué se rompieron las pruebas?" | el [servidor MCP](#agentes-de-ia-mcp) |
 
 ## Cómo funciona
 
 1. **Una huella en cada ejecución.** `lastgreen run` registra lo que *de verdad*
-   está instalado en `node_modules` (del lockfile oculto de npm, contrastado
-   con el disco), la versión de Node que recibe tu comando, el gestor de
-   paquetes, las variables de entorno que afectan la ejecución, archivos de
-   configuración y el estado de git. Corre en paralelo con tu comando y tarda
-   unos 60–180 ms (un proyecto de 200 paquetes da una huella de ~45 KB).
-2. **Diferencias.** Cuando falla, `why` compara ahora contra el último verde y
-   ordena sospechosos: saltos de versión mayor, dependencias directas y
-   paquetes que aparecen en el error van primero.
+   está instalado (el lockfile oculto de npm contrastado con el disco, o el grafo
+   de enlaces de pnpm), la versión de Node que recibe tu comando, el gestor de
+   paquetes, las variables que afectan la ejecución, archivos de configuración y
+   el estado de git. Corre en paralelo con tu comando y tarda 60–180 ms.
+2. **Diferencias ordenadas.** Cuando falla, `why` compara ahora con el último
+   verde. Los saltos de versión mayor, las dependencias directas y los paquetes
+   que aparecen en el error van primero.
 3. **Delta debugging.** Vuelve a correr tu comando con partes del entorno viejo
-   (algoritmo *ddmin* de Zeller y Hildebrandt), así que un culpable entre
-   cientos de cambios se encuentra en pocas ejecuciones; si aparece en el
-   mensaje de error, normalmente en 4.
+   (algoritmo *ddmin* de Zeller y Hildebrandt), así que un culpable entre cientos
+   de cambios se encuentra en pocas ejecuciones: 7 para los 13 cambios de arriba.
 4. **Entiende las dependencias.** Devolver `chalk@4` también devuelve el
-   `ansi-styles` que necesita; dejar `debug@4.4` nuevo deja el `ms` que exige.
-   Revisa los rangos semver para que cada configuración probada sea coherente.
-5. **Confirmado en las dos direcciones.** Deshacer solo al culpable debe hacer
-   que pase, y dejar solo al culpable debe hacer que falle. Si no, lo dice.
+   `ansi-styles` que necesita; dejar `debug@4.4` deja el `ms` que exige. Revisa
+   los rangos semver para que cada combinación probada sea una que npm o pnpm
+   pudieron haber instalado.
+5. **Demostrado en las dos direcciones.** Deshacer solo al culpable debe hacer
+   que pase, y dejar solo al culpable debe hacer que falle. Si no, lo dice en vez
+   de adivinar.
+
+## ¿Por qué no simplemente…
+
+- **…`git bisect`?** Busca en commits. Aquí ningún commit es malo: el código es el
+  mismo y lo que se movió fue el entorno. lastgreen te avisa cuando *sí* es el
+  código y te da el comando `git bisect` exacto.
+- **…revisar el diff del lockfile?** Te da 200 líneas cambiadas y ninguna
+  respuesta. ¿Cuál importa, y revertirla de verdad lo arregla?
+- **…preguntarle a mi agente de IA?** Lee el error y adivina. lastgreen hace el
+  experimento y lo confirma. Mejor aún: dale lastgreen al agente como
+  [herramienta](#agentes-de-ia-mcp).
+- **…usar Docker o Nix para que nada se mueva?** Excelente si puedes. La mayoría
+  de los proyectos no pueden fijarlo todo, y aun así las imágenes de CI y las
+  versiones de Node cambian.
+
+## En CI
+
+La GitHub Action guarda la huella verde de tu rama principal. Cuando una
+ejecución falla, compara contra ella, encuentra al culpable y escribe el informe
+en el resumen del job.
+
+```yaml
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - uses: MarioACo/lastgreen@v0
+        with:
+          command: npm test
+```
+
+El job falla exactamente cuando fallan tus pruebas. Salidas: `result` (`green`,
+`found`, `not-in-env`…) y `exit-code`. Fuera de GitHub, `npx lastgreen why
+--json` da el mismo resultado en JSON.
+
+## Agentes de IA (MCP)
+
+`lastgreen mcp` es un servidor de [Model Context Protocol](https://modelcontextprotocol.io)
+con tres herramientas: `lastgreen_record`, `lastgreen_diff` y `lastgreen_why`.
+Tu agente deja de adivinar a partir del stack trace y recibe un culpable
+confirmado con el comando exacto para arreglarlo.
+
+```bash
+# Claude Code
+claude mcp add lastgreen -- npx -y lastgreen mcp
+```
+
+```toml
+# Codex: ~/.codex/config.toml
+[mcp_servers.lastgreen]
+command = "npx"
+args = ["-y", "lastgreen", "mcp"]
+```
+
+```json
+// Cursor: .cursor/mcp.json
+{ "mcpServers": { "lastgreen": { "command": "npx", "args": ["-y", "lastgreen", "mcp"] } } }
+```
 
 ## Seguridad
 
-- `node_modules` se modifica **temporalmente** y se restaura al final. Cada
-  paso se anota en `.lastgreen/journal.json` *antes* de hacerlo: si pulsas
-  Ctrl+C, se cae el proceso o se va la luz, el siguiente comando de lastgreen (o
-  `lastgreen restore`) lo repara y verifica contra el disco.
-- Las versiones viejas de paquetes se descargan como tarballs y se comprueban
-  con el **hash de integridad que se registró al instalarlas**. Nunca se
-  ejecutan scripts de instalación.
-- Las versiones viejas de Node salen de tu gestor (nvm, nvm-windows, fnm, volta,
-  mise, asdf, n) o de nodejs.org, **verificadas con los SHA-256 oficiales**.
-- Tu código fuente nunca se toca.
+- **Tu código nunca se toca.**
+- **`node_modules` siempre se restaura.** Cada cambio se anota en
+  `.lastgreen/journal.json` *antes* de hacerlo. Si pulsas Ctrl+C, el proceso se
+  cae o se va la luz, el siguiente comando de lastgreen (o `lastgreen restore`)
+  lo repara y lo verifica contra el disco. Probado con un Ctrl+C real en Windows
+  y con el proceso matado en los tres sistemas.
+- **Descargas verificadas.** Las versiones viejas de paquetes se comprueban con
+  el hash de integridad que se registró al instalarlas. Las versiones viejas de
+  Node salen de tu gestor (nvm, nvm-windows, fnm, volta, mise, asdf, n) o de
+  nodejs.org, comprobadas con los SHA-256 oficiales.
+- **No se ejecutan scripts de instalación**, salvo que uses `--rebuild` (para
+  módulos nativos).
 
 ## Privacidad
 
-Las huellas se quedan en `.lastgreen/` (git las ignora automáticamente). Las
-variables de entorno se guardan como un hash SHA-256 corto; solo se guarda el
-valor de una lista corta de variables de comportamiento que no son secretas
-(`NODE_OPTIONS`, `NODE_ENV`, `TZ`, `LANG`, `CI`...), y nunca de nada cuyo nombre
-parezca un secreto. Los `.env` se resumen con hash, nunca se copian.
-`lastgreen export` además quita rutas locales y la salida de las pruebas. No se
-envía nada a ningún lado.
+Las huellas se quedan en `.lastgreen/`, que git ignora automáticamente. No se
+envía nada a ningún lado. Las variables de entorno se guardan como un hash
+SHA-256 corto; solo se guarda el valor de una lista corta de variables de
+comportamiento que no son secretas (`NODE_OPTIONS`, `NODE_ENV`, `TZ`, `LANG`,
+`CI`…), y nunca de nada cuyo nombre parezca un secreto. Los `.env` se resumen
+con hash, nunca se copian. `lastgreen export` además quita rutas locales y la
+salida de las pruebas.
 
-## Opciones
+## Soporte
+
+| | Encuentra al culpable | Notas |
+| --- | :---: | --- |
+| npm | ✅ | probado con el registro real |
+| pnpm | ✅ | probado con el registro real, incluso versiones que pnpm ya borró |
+| yarn classic, bun | ✅ | `node_modules` plano; menos probado |
+| Yarn Plug'n'Play | — | solo diferencias |
+| Versión de Node.js | ✅ | descarga y verifica versiones viejas si hace falta |
+| Variables de entorno | ✅ | cuando el valor viejo no es secreto, o la variable es nueva |
+| Gestor de paquetes, sistema, `.env` / configuración, código fuente | — | aparecen en las diferencias; para el código te da el comando `git bisect` |
+
+Windows, macOS y Linux, Node.js 20+. Cero dependencias. Inglés y español
+(automático, o `--lang`).
+
+Necesita un comando de prueba que pase o falle de forma fiable: las pruebas
+inestables aparecen como "sin confirmar". Las causas de fuera de la máquina (una
+API remota, la fecha) no se pueden devolver; en ese caso `why` te dice que la
+causa *no* es el entorno, y eso también es una respuesta.
+
+<details>
+<summary><b>Todos los comandos y opciones</b></summary>
 
 ```text
-lastgreen run -- <comando>         ejecuta y guarda una huella (verde o roja)
-lastgreen why                      encuentra y confirma al culpable
-lastgreen diff                     lista los cambios desde el último verde, sin ejecutar
-lastgreen export [-o archivo]      comparte tu último verde
-lastgreen log                      lista las huellas guardadas
-lastgreen restore                  repara node_modules tras una búsqueda interrumpida
+lastgreen run -- <comando>     ejecuta y guarda una huella (verde o roja)
+lastgreen why                  encuentra y confirma al culpable
+lastgreen diff                 lista los cambios desde el último verde, sin ejecutar
+lastgreen export [-o archivo]  comparte tu último verde
+lastgreen log                  lista las huellas guardadas
+lastgreen restore              repara node_modules tras una búsqueda interrumpida
+lastgreen mcp                  servidor MCP para agentes de IA
 
   -c, --command <cmd>   comando a repetir (por defecto: el del último verde)
   --against <archivo>   compara con una huella exportada
@@ -142,52 +221,47 @@ lastgreen restore                  repara node_modules tras una búsqueda interr
 ```
 
 Configuración opcional en `.lastgreenrc.json` o en la clave `"lastgreen"` de
-`package.json`: `{ "command": "npm test", "ignoreEnv": ["MI_RUIDO_*"], "timeout": 300 }`.
+`package.json`:
 
-## Soporte y límites (v0.1)
-
-- **Busca al culpable en:** `node_modules` de npm (y estructuras planas: yarn
-  classic, bun), versión de Node.js y variables de entorno. Windows, macOS y
-  Linux, Node 20+.
-- **Por ahora solo muestra diferencias de:** pnpm, Yarn PnP, versiones del
-  gestor de paquetes, actualizaciones del sistema, contenido de `.env` y de
-  configuración, y código fuente (para el código te da el comando `git bisect`).
-- Los paquetes con scripts de instalación (módulos nativos) se cambian sin
-  recompilar, salvo que uses `--rebuild`, que corre `npm rebuild` en los que
-  se devuelven. `why` te avisa cuando eso importa.
-- Necesita un comando de prueba que pase o falle de forma fiable. Las pruebas
-  inestables aparecen como "sin confirmar".
-- Las causas de fuera de la máquina (una API remota, la fecha) no se pueden
-  devolver; en ese caso `why` te dice que la causa *no* es el entorno, y eso
-  también es una respuesta.
-
-## En CI
-
-En GitHub Actions, `why` también escribe su informe en la página de resumen
-del job. Para "falla en CI y en mi laptop no", guarda el verde de `main`:
-
-```yaml
-- run: npx lastgreen run -- npm test
-- if: success() && github.ref == 'refs/heads/main'
-  run: npx lastgreen export -o lastgreen-main.json
-- if: success() && github.ref == 'refs/heads/main'
-  uses: actions/upload-artifact@v4
-  with: { name: lastgreen-main, path: lastgreen-main.json }
+```json
+{ "command": "npm test", "ignoreEnv": ["MI_RUIDO_*"], "timeout": 300 }
 ```
 
-Luego, en cualquier máquina: `npx lastgreen why --against lastgreen-main.json`.
+</details>
+
+## lastgreen para equipos
+
+La CLI, la GitHub Action y el servidor MCP son gratis y MIT, para siempre.
+
+Para equipos estamos construyendo la parte alojada, lo que una persona sola no necesita:
+
+- **Cero configuración:** la huella verde de cada repo y rama, guardada por ti.
+- **Un comentario en el PR con el culpable confirmado** cuando CI se rompe sin
+  cambios de código.
+- **Vista de desviaciones:** qué laptops y qué runners de CI se alejaron del
+  verde, antes de que se rompan.
+- **Historial:** cuántas veces el entorno rompió el build y cuánto tardaron en arreglarlo.
+
+Gratis para código abierto y personas. Para repos privados de organizaciones el
+plan es de **8 dólares por committer activo al mes** (contado como GitHub:
+quienes subieron commits en los últimos 90 días). Los equipos de acceso
+anticipado lo usan gratis durante la beta.
+
+**[→ Pide acceso anticipado](https://github.com/MarioACo/lastgreen/issues/new?template=team-interest.yml)**
 
 ## Próximamente
 
-- Búsqueda con pnpm y después Python (uv / pip)
-- Hooks y servidor MCP para agentes de IA: "¿qué le cambió el agente a mi
-  máquina?" y `why` como herramienta
-- **lastgreen para equipos** (alojado, de pago para repos privados de
-  organizaciones): el verde de `main` guardado por ti, un comentario en el PR
-  con el culpable confirmado cuando CI se rompe sin cambios de código, y una
-  vista de qué máquinas se alejaron de CI. Si tu equipo lo quiere,
-  [avísanos aquí](https://github.com/MarioACo/lastgreen/issues/new?template=team-interest.yml).
+- [x] npm, pnpm, versiones de Node.js, variables de entorno
+- [x] GitHub Action, servidor MCP, `--json`
+- [ ] Python (uv, pip) y reproducción solo con el lockfile en CI
+- [ ] "¿Qué le cambió el agente a mi máquina?": huellas antes y después de cada sesión de un agente de IA
+- [ ] lastgreen para equipos (alojado)
+
+## Contribuir
+
+Los issues y pull requests son bienvenidos. Mira [CONTRIBUTING.md](CONTRIBUTING.md).
+Para reportar un problema de seguridad, mira [SECURITY.md](SECURITY.md).
 
 ## Licencia
 
-[MIT](LICENSE). La CLI es y seguirá siendo gratis y de código abierto.
+[MIT](LICENSE) © MarioACo

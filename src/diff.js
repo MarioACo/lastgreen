@@ -3,6 +3,7 @@
 // either testable (we can put the old state back and re-run) or info-only.
 import { isBehavioural, isCritical } from './env.js';
 import { nameFromKey } from './packages.js';
+import { instancesByName } from './pnpm.js';
 import { satisfies } from './semver.js';
 
 const PKG_SEP = '/node_modules/';
@@ -52,7 +53,75 @@ function platformBound(entry) {
 
 const LEVEL_SCORE = { major: 40, minor: 15, patch: 5, prerelease: 5, other: 10 };
 
+function scorePackage(factor, { level, change, direct, mentioned }) {
+  if (level) {
+    factor.score += LEVEL_SCORE[level];
+    factor.tags.push(level);
+  } else if (change === 'changed') {
+    factor.score += 10;
+    factor.tags.push('peers');
+  } else {
+    factor.score += 20;
+    factor.tags.push(change);
+  }
+  if (direct) {
+    factor.score += 15;
+    factor.tags.push('direct');
+  }
+  if (mentioned.has(factor.name)) {
+    factor.score += 100;
+    factor.tags.push('in-output');
+  }
+  if (factor.script) factor.tags.push('install-script');
+}
+
+/** pnpm: one factor per package name, covering every installed copy of it. */
+function pnpmFactors(green, current, { mentioned, crossPlatform }) {
+  const gBy = instancesByName(green);
+  const cBy = instancesByName(current);
+  const gRoot = green.pnpm?.importers?.['.'] ?? {};
+  const cRoot = current.pnpm?.importers?.['.'] ?? {};
+  const factors = [];
+  for (const name of [...new Set([...gBy.keys(), ...cBy.keys()])].sort()) {
+    const g = [...(gBy.get(name) ?? [])].sort();
+    const c = [...(cBy.get(name) ?? [])].sort();
+    if (g.join('\n') === c.join('\n')) continue;
+    const entriesG = g.map((d) => green.packages[`pnpm:${d}`]);
+    const entriesC = c.map((d) => current.packages[`pnpm:${d}`]);
+    const versions = (list) => [...new Set(list.map((e) => e.version))].sort().join(' | ');
+    const change = g.length && c.length ? 'changed' : c.length ? 'added' : 'removed';
+    const from = g.length ? green.packages[`pnpm:${gRoot[name]}`]?.version ?? versions(entriesG) : null;
+    const to = c.length ? current.packages[`pnpm:${cRoot[name]}`]?.version ?? versions(entriesC) : null;
+    const level = change === 'changed' && from !== to ? versionLevel(from, to) : null;
+    const direct = current.packages[`pnpm:${cRoot[name]}`]?.direct ?? green.packages[`pnpm:${gRoot[name]}`]?.direct ?? null;
+    const factor = {
+      id: `pnpm:${name}`,
+      kind: 'package',
+      name,
+      key: `pnpm:${name}`,
+      parent: null,
+      change,
+      from,
+      to,
+      level,
+      direct,
+      script: [...entriesG, ...entriesC].some((e) => e?.script),
+      paths: [],
+      pnpm: { green: g, current: c },
+      testable: true,
+      reason: null,
+      tags: [],
+      score: 10,
+    };
+    if (crossPlatform && [...entriesG, ...entriesC].some(platformBound)) [factor.testable, factor.reason] = [false, 'platform'];
+    scorePackage(factor, { level, change, direct, mentioned });
+    factors.push(factor);
+  }
+  return factors;
+}
+
 function packageFactors(green, current, { mentioned, crossPlatform }) {
+  if (green.layout === 'pnpm' && current.layout === 'pnpm') return pnpmFactors(green, current, { mentioned, crossPlatform });
   const gp = green.packages ?? {};
   const cp = current.packages ?? {};
   const pnpm = current.layout === 'pnpm' || green.layout === 'pnpm';
@@ -80,7 +149,7 @@ function packageFactors(green, current, { mentioned, crossPlatform }) {
       if (parent) continue;
     }
     const entry = c ?? g;
-    const name = pnpm ? key.slice('pnpm:'.length) : entry.name ?? nameFromKey(key);
+    const name = entry.name ?? nameFromKey(key);
     const level = change === 'changed' ? versionLevel(g.version, c.version) : null;
     const direct = (c ?? g).direct ?? null;
     const factor = {
@@ -101,8 +170,7 @@ function packageFactors(green, current, { mentioned, crossPlatform }) {
       tags: [],
       score: 10,
     };
-    if (pnpm) [factor.testable, factor.reason] = [false, 'pnpm'];
-    else if (layoutChanged) [factor.testable, factor.reason] = [false, 'layout'];
+    if (layoutChanged || pnpm) [factor.testable, factor.reason] = [false, 'layout'];
     else if (crossPlatform && (platformBound(g) || platformBound(c))) [factor.testable, factor.reason] = [false, 'platform'];
     if (level) {
       factor.score += LEVEL_SCORE[level];
@@ -296,6 +364,22 @@ export function computeCoupling(green, current, factors) {
     if (!map.has(from)) map.set(from, new Set());
     map.get(from).add(to);
   };
+  // pnpm: links say exactly which copy of each dependency a package uses.
+  const pnpmByName = new Map(factors.filter((f) => f.pnpm && f.testable).map((f) => [f.name, f]));
+  for (const f of pnpmByName.values()) {
+    for (const d of f.pnpm.green) {
+      for (const t of Object.values(green.packages?.[`pnpm:${d}`]?.links ?? {})) {
+        const target = pnpmByName.get(green.packages?.[`pnpm:${t}`]?.name);
+        if (target && target !== f && !current.packages?.[`pnpm:${t}`]) add(greenNeeds, f.id, target.id);
+      }
+    }
+    for (const d of f.pnpm.current) {
+      for (const t of Object.values(current.packages?.[`pnpm:${d}`]?.links ?? {})) {
+        const target = pnpmByName.get(current.packages?.[`pnpm:${t}`]?.name);
+        if (target && target !== f && !green.packages?.[`pnpm:${t}`]) add(currentNeeds, f.id, target.id);
+      }
+    }
+  }
   for (const f of factors) {
     if (f.kind !== 'package' || !f.paths || !f.testable) continue;
     for (const p of f.paths) {

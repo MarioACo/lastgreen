@@ -72,6 +72,10 @@ async function main() {
       return cmdLog(opts);
     case 'restore':
       return cmdRestore();
+    case 'mcp': {
+      const { serve } = await import('../src/mcp.js');
+      return serve();
+    }
     default:
       throw new UserError(`Unknown command "${command}". Try: lastgreen --help`);
   }

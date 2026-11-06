@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { exists, readJson } from './fsx.js';
+import { readPnpm } from './pnpm.js';
 
 const DEFAULT_REGISTRIES = ['https://registry.npmjs.org/', 'https://registry.yarnpkg.com/'];
 
@@ -156,29 +157,6 @@ export function pnpmName(dir) {
   return dir.slice(0, at).replace('+', '/');
 }
 
-function readPnpm(root) {
-  const store = path.join(root, 'node_modules', '.pnpm');
-  const versions = new Map();
-  let dirs = [];
-  try {
-    dirs = fs.readdirSync(store);
-  } catch {}
-  for (const dir of dirs) {
-    if (dir.startsWith('.') || dir === 'node_modules' || dir === 'lock.yaml') continue;
-    const name = pnpmName(dir);
-    if (!name) continue;
-    const pj = readJson(path.join(store, dir, 'node_modules', ...name.split('/'), 'package.json'));
-    if (!pj?.version) continue;
-    if (!versions.has(name)) versions.set(name, new Set());
-    versions.get(name).add(pj.version);
-  }
-  const out = {};
-  for (const [name, set] of [...versions].sort(([a], [b]) => a.localeCompare(b))) {
-    out[`pnpm:${name}`] = { version: [...set].sort().join(' | ') };
-  }
-  return out;
-}
-
 export function readInstalled(root) {
   const pkgJson = readJson(path.join(root, 'package.json'), {});
   const manager = detectManager(root, pkgJson);
@@ -189,12 +167,13 @@ export function readInstalled(root) {
   if (!exists(path.join(root, 'node_modules'))) return { manager, layout: 'none', packages: {} };
 
   if (exists(path.join(root, 'node_modules', '.pnpm'))) {
-    const packages = readPnpm(root);
-    for (const [key, entry] of Object.entries(packages)) {
-      const kind = direct[key.slice('pnpm:'.length)];
-      if (kind) entry.direct = kind;
+    const { packages, pnpm } = readPnpm(root);
+    const rootLinks = pnpm.importers['.'] ?? {};
+    for (const [name, kind] of Object.entries(direct)) {
+      const entry = packages[`pnpm:${rootLinks[name]}`];
+      if (entry) entry.direct = kind;
     }
-    return { manager: 'pnpm', layout: 'pnpm', packages };
+    return { manager: 'pnpm', layout: 'pnpm', packages, pnpm };
   }
 
   let packages = readHiddenLockfile(root);
