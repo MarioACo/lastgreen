@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+- **Runs on Node.js 16 and 18 too** (was 20+), so projects that still live on an
+  older Node can record their green runs. Downloads no longer need `fetch`.
+- **The Node version a project declares is a baseline.** `.nvmrc`,
+  `.node-version`, `.tool-versions`, Volta and `engines.node` are read:
+  `lastgreen run` warns when the Node in use does not match, and `lastgreen why`
+  works even without a green run (a fresh clone on the wrong Node is enough).
+- `--node <version>`: compare with any Node.js version (`18`, `lts/hydrogen`,
+  `^20`), preferring one already installed, otherwise an official verified build.
+- Nested runs are safe: a wrapped test script re-run during a bisect does not
+  record snapshots.
+
 ## 0.2.0
 
 - `lastgreen init [--ci]`: one command to set a project up. Wraps the test script

@@ -43,6 +43,10 @@ const en = {
   fetching: (n) => `Getting ${n} package version${n === 1 ? '' : 's'} from the last green (cached, integrity-checked)...`,
   downloadingNode: (v) => `Downloading official Node.js ${v} (verified with nodejs.org SHA-256)...`,
   nothingTestable: 'None of these changes can be put back automatically.',
+  declaredMismatch: (spec, source, now) => `this project asks for Node ${spec} (${source}) and this run used ${now}`,
+  declaredMatches: (spec, source) => `Your Node.js matches what the project declares (${spec}, ${source}), so there is nothing to compare yet.`,
+  cannotResolveNode: (spec) => `Could not find a Node.js version for "${spec}" (offline, or not a version nodejs.org knows).`,
+  comparingDeclared: (spec, source, v) => `No green run saved: comparing with what the project declares, Node ${spec} (${source}) → ${v}`,
   lostFactors: (n) => `${n} change${n === 1 ? '' : 's'} could not be put back, so ${n === 1 ? 'it is' : 'they are'} not part of the search:`,
   otherMachineEnv: (n) => `${n} environment variable${n === 1 ? '' : 's'} differ${n === 1 ? 's' : ''} because it is another machine (not compared)`,
   bisecting: (n, cmd) => `Finding the culprit among ${n} change${n === 1 ? '' : 's'} with \`${cmd}\``,
@@ -57,6 +61,7 @@ const en = {
   timedOut: 'timed out',
   cfgCurrent: 'current environment',
   cfgGreen: 'last green environment',
+  cfgDeclared: (v) => `same environment with Node ${v}`,
   cfgOnly: (label) => `only: ${label}`,
   cfgAllBut: (label) => `all except: ${label}`,
   cfgSome: (k, n) => `${k} of ${n} changes`,
@@ -172,6 +177,7 @@ Options for why/diff
   --offline             do not download old packages or Node versions
   --rebuild             run install scripts (native addons) of restored packages
   --repeat <n>          run each configuration n times; disagreeing runs count as flaky
+  --node <version>      compare with another Node.js version (18, lts/hydrogen, ^20), no green run needed
   --show-output         print the end of each run's output
   --json                machine-readable result on stdout (for CI and AI agents)
 
@@ -221,6 +227,10 @@ const es = {
   fetching: (n) => `Obteniendo ${n} ${n === 1 ? 'versión' : 'versiones'} de paquetes del último verde (en caché, con integridad verificada)...`,
   downloadingNode: (v) => `Descargando Node.js ${v} oficial (verificado con el SHA-256 de nodejs.org)...`,
   nothingTestable: 'Ninguno de estos cambios se puede revertir automáticamente.',
+  declaredMismatch: (spec, source, now) => `este proyecto pide Node ${spec} (${source}) y esta ejecución usó ${now}`,
+  declaredMatches: (spec, source) => `Tu Node.js coincide con lo que declara el proyecto (${spec}, ${source}), así que aún no hay con qué comparar.`,
+  cannotResolveNode: (spec) => `No encontré una versión de Node.js para "${spec}" (sin conexión, o nodejs.org no la conoce).`,
+  comparingDeclared: (spec, source, v) => `No hay verde guardado: comparo con lo que declara el proyecto, Node ${spec} (${source}) → ${v}`,
   lostFactors: (n) => `${n} cambio${n === 1 ? '' : 's'} no se ${n === 1 ? 'pudo' : 'pudieron'} devolver, así que no entra${n === 1 ? '' : 'n'} en la búsqueda:`,
   otherMachineEnv: (n) => `${n} variable${n === 1 ? '' : 's'} de entorno distinta${n === 1 ? '' : 's'} por ser otra máquina (no se comparan)`,
   bisecting: (n, cmd) => `Buscando al culpable entre ${n} cambio${n === 1 ? '' : 's'} con \`${cmd}\``,
@@ -235,6 +245,7 @@ const es = {
   timedOut: 'tiempo agotado',
   cfgCurrent: 'entorno actual',
   cfgGreen: 'entorno del último verde',
+  cfgDeclared: (v) => `mismo entorno con Node ${v}`,
   cfgOnly: (label) => `solo: ${label}`,
   cfgAllBut: (label) => `todo menos: ${label}`,
   cfgSome: (k, n) => `${k} de ${n} cambios`,
@@ -350,6 +361,7 @@ Opciones de why/diff
   --offline             no descargar paquetes ni versiones de Node
   --rebuild             ejecutar scripts de instalación (módulos nativos) de lo restaurado
   --repeat <n>          correr cada configuración n veces; si no coinciden, cuenta como inestable
+  --node <versión>      comparar con otra versión de Node.js (18, lts/hydrogen, ^20), sin verde previo
   --show-output         mostrar el final de la salida de cada ejecución
   --json                resultado legible por máquinas en stdout (CI y agentes de IA)
 

@@ -5,13 +5,13 @@ import { VERSION } from '../src/snapshot.js';
 import { setColor } from '../src/ui.js';
 
 const [major] = process.versions.node.split('.').map(Number);
-if (major < 20) {
-  process.stderr.write(`lastgreen needs Node.js 20 or newer (you have ${process.version}).\n`);
+if (major < 16) {
+  process.stderr.write(`lastgreen needs Node.js 16 or newer (you have ${process.version}).\n`);
   process.exit(1);
 }
 
 const VALUE_FLAGS = { '-c': 'command', '--command': 'command', '--against': 'against', '--max-runs': 'maxRuns',
-  '--timeout': 'timeout', '--repeat': 'repeat', '-o': 'out', '--out': 'out', '-n': 'n', '--lang': 'lang' };
+  '--timeout': 'timeout', '--repeat': 'repeat', '--node': 'node', '-o': 'out', '--out': 'out', '-n': 'n', '--lang': 'lang' };
 const BOOL_FLAGS = { '--dry-run': 'dryRun', '--offline': 'offline', '--rebuild': 'rebuild', '--json': 'json', '--show-output': 'showOutput',
   '--now': 'now', '--ci': 'ci', '--no-install': 'noInstall', '--no-color': 'noColor', '-h': 'help', '--help': 'help', '-v': 'version', '--version': 'version' };
 const NUMERIC = new Set(['maxRuns', 'timeout', 'n', 'repeat']);

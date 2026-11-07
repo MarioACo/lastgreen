@@ -39,7 +39,7 @@ function client(cwd) {
   };
 }
 
-test('MCP: handshake, tool list, and lastgreen_why finds the culprit for an agent', { timeout: 120_000 }, async (t) => {
+test('MCP: handshake, tool list, and lastgreen_why finds the culprit for an agent', { timeout: 120_000 }, async () => {
   const dir = tmpDir();
   const root = path.join(dir, 'proj');
   const tars = path.join(dir, 'tars');
@@ -51,7 +51,7 @@ test('MCP: handshake, tool list, and lastgreen_why finds the culprit for an agen
   await install(root, { 'node_modules/alpha': alpha('1.0.0', 'exports.add = (a, b) => a + b;') });
 
   const mcp = client(root);
-  t.after(() => mcp.close());
+  try {
   const init = await mcp.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
   assert.equal(init.result.protocolVersion, '2025-06-18');
   assert.equal(init.result.serverInfo.name, 'lastgreen');
@@ -73,7 +73,9 @@ test('MCP: handshake, tool list, and lastgreen_why finds the culprit for an agen
 
   const unknown = await mcp.request('nope', {});
   assert.equal(unknown.error.code, -32601);
-  await mcp.close();
+  } finally {
+    await mcp.close();
+  }
   assert.ok(fs.existsSync(path.join(root, '.lastgreen')));
   assert.equal(cli(root, ['log']).code, 0);
 });

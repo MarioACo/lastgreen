@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirp, readJson } from './fsx.js';
 import { keyToPath } from './packages.js';
+import { getJson as httpGetJson, getText as httpGetText } from './http.js';
 
 const TIMEOUT = 8000;
 
@@ -195,15 +196,11 @@ export function githubRepo(pkg) {
 }
 
 async function getJson(url, headers = {}) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'lastgreen', ...headers }, signal: AbortSignal.timeout(TIMEOUT) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return httpGetJson(url, { headers, timeoutMs: TIMEOUT });
 }
 
-async function getText(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'lastgreen' }, signal: AbortSignal.timeout(TIMEOUT) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.text();
+function getText(url) {
+  return httpGetText(url, { timeoutMs: TIMEOUT });
 }
 
 function cached(cacheDir, name, maxAgeMs) {

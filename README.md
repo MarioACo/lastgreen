@@ -13,7 +13,7 @@ and shows the line to change.
 
 [![CI](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml/badge.svg)](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/lastgreen?color=2da44e&label=npm)](https://www.npmjs.com/package/lastgreen)
-[![node](https://img.shields.io/badge/node-%E2%89%A520-2da44e)](#support)
+[![node](https://img.shields.io/badge/node-%E2%89%A516-2da44e)](#support)
 [![dependencies](https://img.shields.io/badge/dependencies-0-2da44e)](package.json)
 [![license](https://img.shields.io/badge/license-MIT-2da44e)](LICENSE)
 
@@ -59,6 +59,7 @@ and exit code through untouched and adds one line at the end.
 | "CI is red and nobody changed anything." | the [GitHub Action](#in-ci) |
 | "The Dependabot / Renovate PR is red." | the [GitHub Action](#with-dependabot-and-renovate): which bump, which line, which release note |
 | "It only fails sometimes." | `lastgreen why --repeat 3` |
+| "The project is on Node 18 and I'm on 22." | `lastgreen why`: uses `.nvmrc` / `engines`, even with no green run |
 | "Agent, why did the tests break?" | the [MCP server](#ai-agents-mcp) |
 
 ## How it works
@@ -222,11 +223,11 @@ export` also strips local paths and test output.
 | pnpm | ✅ | real-registry tested, including versions pnpm already deleted |
 | yarn classic, bun | ✅ | hoisted `node_modules`; less tested |
 | Yarn Plug'n'Play | — | diff only |
-| Node.js version | ✅ | downloads and verifies old versions if needed |
+| Node.js version | ✅ | downloads and verifies old versions if needed; `.nvmrc`, `.node-version`, `.tool-versions`, Volta and `engines` count as the expected version |
 | Environment variables | ✅ | when the old value is non-secret, or the variable is new |
 | Package manager, OS, `.env` / config files, source code | — | shown in the diff; for code it prints the `git bisect` command |
 
-Windows, macOS and Linux, Node.js 20+. Zero dependencies. English and Spanish
+Windows, macOS and Linux, Node.js 16+. Zero dependencies. English and Spanish
 (automatic, or `--lang`).
 
 Flaky tests: with `--repeat 3` every configuration runs three times, and one
@@ -256,6 +257,7 @@ lastgreen mcp                  MCP server for AI agents
   --offline             never download packages or Node versions
   --rebuild             run install scripts (native addons) of restored packages
   --repeat <n>          run each configuration n times; disagreeing runs are flaky
+  --node <version>      compare with another Node.js version (18, lts/hydrogen, ^20)
   --show-output         print the end of each run's output
   --json                machine-readable result on stdout
   --lang en|es          language (also LASTGREEN_LANG)
@@ -306,6 +308,7 @@ who pushed in the last 90 days). Early-access teams use it free during the beta.
 - [x] npm, pnpm, Node.js versions, environment variables
 - [x] GitHub Action, MCP server, `--json`
 - [x] `lastgreen init`, flaky tests (`--repeat`), Dependabot and Renovate PRs
+- [x] Node.js 16+, the declared Node version as a baseline, `--node`
 - [ ] Python (uv, pip) and lockfile-only reproduction in CI
 - [ ] "What did the agent change on my machine?": snapshots around AI agent sessions
 - [ ] lastgreen for teams (hosted)

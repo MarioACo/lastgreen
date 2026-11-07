@@ -114,7 +114,7 @@ export async function takeSnapshot(root, env, { ignoreEnv = [] } = {}) {
 
 /** Copy that is safe to send to a teammate: no output, no local paths. */
 export function redact(snapshot) {
-  const copy = structuredClone(snapshot);
+  const copy = JSON.parse(JSON.stringify(snapshot));
   delete copy.output;
   if (copy.node) delete copy.node.path;
   delete copy.cwd;

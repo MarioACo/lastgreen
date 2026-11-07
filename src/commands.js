@@ -7,7 +7,8 @@ import { readJson, writeJson } from './fsx.js';
 import { findCulprit } from './bisect.js';
 import { explainCulprits, failingLocations } from './explain.js';
 import { ago, factorLabel, reasonText, t } from './i18n.js';
-import { downloadNode, findNodeDir, probeNode } from './runtime.js';
+import { declaredNode, downloadNode, findNodeDir, nodeIndex, nodeSpecSatisfied, probeNode, resolveNodeSpec } from './runtime.js';
+import { unwrapTestScript } from './init.js';
 import { redact, takeSnapshot, VERSION } from './snapshot.js';
 import { Store, cacheDir, findRoot, loadConfig } from './store.js';
 import { c, configureFor, createWriter, pad, seconds, sym } from './ui.js';
@@ -74,6 +75,15 @@ export async function cmdRun(rest) {
   const command = rest.length ? shellJoin(rest) : config.command ?? defaultCommand(root, detectManager(root));
   if (!command) throw new UserError(t('noCommand'));
 
+  // Inside a bisect (e.g. `--command "npm test"` with a wrapped test script): just run it.
+  if (process.env.LASTGREEN_BISECT) {
+    const env = { ...process.env };
+    prependPath(env, path.join(root, 'node_modules', '.bin'));
+    const r = await runCommand(command, { cwd: process.cwd(), env, tee: true });
+    process.exitCode = r.code ?? 1;
+    return;
+  }
+
   const hidden = path.join(root, 'node_modules', '.package-lock.json');
   const before = mtime(hidden);
   const snapPromise = takeSnapshot(root, process.env, { ignoreEnv: config.ignoreEnv });
@@ -113,6 +123,13 @@ export async function cmdRun(rest) {
     }
   } else {
     say(`${tag} ${c.red(sym.fail)} ${t('redNoGreen')}`);
+  }
+  // The project says which Node it runs on; say so when this is not it.
+  const declared = declaredNode(root);
+  if (declared && snap.node?.version && nodeSpecSatisfied(declared.spec, snap.node.version) === false) {
+    const line = `${tag} ${sym.warn} ${t('declaredMismatch', declared.spec, declared.source, snap.node.version)}`;
+    say(green ? c.dim(line) : c.yellow(line));
+    if (!green && !previousGreen) say(`${' '.repeat(10)}${sym.arrow} ${t('runWhy')} ${c.cyan('npx lastgreen why')}`);
   }
   process.exitCode = result.code ?? 1;
 }
@@ -158,8 +175,11 @@ function groupForDisplay(factors, coupling) {
 }
 
 function printDiff(say, diff, green) {
+  if (green.declared) {
+    say(`${c.bold(t('comparingDeclared', green.declared.spec, green.declared.source, green.node.version))}${green.command ? ` ${sym.dot} ${green.command}` : ''}`);
+  }
   const when = green.exported ? t('exportedFrom', ago(green.at)) : ago(green.at);
-  say(`${c.bold(t('lastGreen'))}  ${when}${green.command ? ` ${sym.dot} ${green.command}` : ''}${green.durationMs ? ` ${sym.dot} ${seconds(green.durationMs)}` : ''}`);
+  if (!green.declared) say(`${c.bold(t('lastGreen'))}  ${when}${green.command ? ` ${sym.dot} ${green.command}` : ''}${green.durationMs ? ` ${sym.dot} ${seconds(green.durationMs)}` : ''}`);
   if (!diff.factors.length) return;
   const groups = groupForDisplay(diff.factors, diff.coupling);
   const testable = groups.filter((g) => g.factor.testable);
@@ -199,7 +219,7 @@ function errorLines(text, root, count = 3) {
   return picked.length ? picked : lines.filter((l) => !isFrame(l)).slice(-count);
 }
 
-function fixLines(f, manager) {
+function fixLines(f, manager, declared = null) {
   const m = manager ?? 'npm';
   if (f.kind === 'package') {
     const explain = { npm: 'npm explain', pnpm: 'pnpm why', yarn: 'yarn why', bun: 'npm explain' }[m];
@@ -224,7 +244,9 @@ function fixLines(f, manager) {
     const v = f.from.replace(/^v/, '');
     const env = process.env;
     const use = env.VOLTA_HOME ? `volta pin node@${v}` : env.FNM_DIR || env.FNM_MULTISHELL_PATH ? `fnm use ${v}` : env.NVM_HOME || env.NVM_DIR ? `nvm use ${v}` : null;
-    return [use ? t('fixNodeUse', use) : t('fixNodeInstall', v), t('fixNodePin', v)];
+    const first = use ? t('fixNodeUse', use) : t('fixNodeInstall', v);
+    // Already pinned in .nvmrc & co.: no need to suggest pinning it.
+    return declared && declared.source !== '--node' ? [first] : [first, t('fixNodePin', v)];
   }
   if (f.kind === 'env') {
     if (f.change === 'added') return [t('fixEnvUnset', f.name)];
@@ -233,10 +255,10 @@ function fixLines(f, manager) {
   return [];
 }
 
-function configLabel(set, factors, coupling) {
+function configLabel(set, factors, coupling, greenLabel = null) {
   const n = factors.length;
   if (set.size === n) return t('cfgCurrent');
-  if (set.size === 0) return t('cfgGreen');
+  if (set.size === 0) return greenLabel ?? t('cfgGreen');
   const kept = factors.filter((f) => set.has(f.id));
   const undone = factors.filter((f) => !set.has(f.id));
   // "only X" / "all except X", where X may drag its own dependencies along.
@@ -275,9 +297,28 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   recoverIfNeeded(root, store, say);
   const config = loadConfig(root);
 
-  const green = opts.against ? loadSnapshotFile(opts.against) : store.latest('green');
-  if (!green) throw new UserError(t('noGreen'));
+  let green = opts.node ? null : opts.against ? loadSnapshotFile(opts.against) : store.latest('green');
   const current = await takeSnapshot(root, process.env, { ignoreEnv: config.ignoreEnv });
+  if (!green) {
+    // No green run to compare with: use the Node version asked for (--node) or the
+    // one the project declares (.nvmrc, engines...). Everything else stays as it is.
+    const declared = opts.node ? { spec: String(opts.node), source: '--node' } : declaredNode(root);
+    const index = declared ? await nodeIndex(cacheDir(), { offline: opts.offline }) : null;
+    const mismatch = declared && current.node?.version && (opts.node || nodeSpecSatisfied(declared.spec, current.node.version, index) === false);
+    if (!mismatch) throw new UserError(declared ? `${t('noGreen')}\n${t('declaredMatches', declared.spec, declared.source)}` : t('noGreen'));
+    const version = await resolveNodeSpec(declared.spec, { cacheDir: cacheDir(), offline: opts.offline });
+    if (!version) throw new UserError(t('cannotResolveNode', declared.spec));
+    const pkg = readJson(path.join(root, 'package.json'), {});
+    green = {
+      ...JSON.parse(JSON.stringify(current)),
+      status: 'declared',
+      at: new Date().toISOString(),
+      node: { version },
+      declared,
+      command: config.command ?? unwrapTestScript(pkg?.scripts?.test, pkg?.lastgreen) ?? defaultCommand(root, current.manager),
+      cwd: path.relative(root, process.cwd()).split(path.sep).join('/'),
+    };
+  }
   const lastRed = store.latest('red');
   const output = lastRed && lastRed.at > green.at ? lastRed.output ?? '' : '';
   const diff = computeDiff(green, current, { output });
@@ -308,7 +349,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   if (!command) throw new UserError(t('noCommandWhy'));
   const cwd = !green.exported && green.cwd != null ? path.join(root, ...green.cwd.split('/').filter(Boolean)) : process.cwd();
   // Like `npm run`: local binaries (vitest, jest, tsc...) resolve without npx.
-  const runEnv = { ...process.env };
+  const runEnv = { ...process.env, LASTGREEN_BISECT: '1' };
   prependPath(runEnv, path.join(root, 'node_modules', '.bin'));
   if (cwd !== root) prependPath(runEnv, path.join(cwd, 'node_modules', '.bin'));
   const cache = cacheDir();
@@ -455,7 +496,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
               ? c.red(`${sym.fail} ${t('fail')}${times}`)
               : c.yellow(`~ ${t('flaky', results.length - passes, results.length)}`);
         const extra = r.timedOut ? c.yellow(` (${t('timedOut')})`) : '';
-        say(`  ${c.dim(pad(`#${runNo}`, 4))} ${pad(mark, 16)} ${c.dim(pad(seconds(r.durationMs), 9))} ${configLabel(set, testable, coupling)}${extra}`);
+        say(`  ${c.dim(pad(`#${runNo}`, 4))} ${pad(mark, 16)} ${c.dim(pad(seconds(r.durationMs), 9))} ${configLabel(set, testable, coupling, green.declared ? t('cfgDeclared', green.node.version) : null)}${extra}`);
         if (opts.showOutput) for (const line of lastLines(r.tail, 6, root)) say(c.dim(`        ${line}`));
         return outcome;
       },
@@ -501,7 +542,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     explained = await explainCulprits(culprit, { root, current, output: failing, cacheDir: cache, offline: opts.offline, cwd });
     printExplain(say, explained, culprit);
 
-    for (const f of culprit) fixes.push(...fixLines(f, current.manager));
+    for (const f of culprit) fixes.push(...fixLines(f, current.manager, green.declared));
     forward.push(...forwardLines(explained, culprit));
     if (fixes.length || forward.length) {
       say('');

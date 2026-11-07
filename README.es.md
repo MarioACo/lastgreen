@@ -13,7 +13,7 @@ y te muestra la línea que debes cambiar.
 
 [![CI](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml/badge.svg)](https://github.com/MarioACo/lastgreen/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/lastgreen?color=2da44e&label=npm)](https://www.npmjs.com/package/lastgreen)
-[![node](https://img.shields.io/badge/node-%E2%89%A520-2da44e)](#soporte)
+[![node](https://img.shields.io/badge/node-%E2%89%A516-2da44e)](#soporte)
 [![dependencias](https://img.shields.io/badge/dependencias-0-2da44e)](package.json)
 [![licencia](https://img.shields.io/badge/licencia-MIT-2da44e)](LICENSE)
 
@@ -60,6 +60,7 @@ y solo agrega una línea al final.
 | "CI está en rojo y nadie cambió nada." | la [GitHub Action](#en-ci) |
 | "El PR de Dependabot / Renovate está en rojo." | la [GitHub Action](#con-dependabot-y-renovate): qué actualización, qué línea, qué nota de versión |
 | "Solo falla a veces." | `lastgreen why --repeat 3` |
+| "El proyecto es Node 18 y yo estoy en 22." | `lastgreen why`: usa `.nvmrc` / `engines`, aunque no haya verde guardado |
 | "Agente, ¿por qué se rompieron las pruebas?" | el [servidor MCP](#agentes-de-ia-mcp) |
 
 ## Cómo funciona
@@ -229,11 +230,11 @@ salida de las pruebas.
 | pnpm | ✅ | probado con el registro real, incluso versiones que pnpm ya borró |
 | yarn classic, bun | ✅ | `node_modules` plano; menos probado |
 | Yarn Plug'n'Play | — | solo diferencias |
-| Versión de Node.js | ✅ | descarga y verifica versiones viejas si hace falta |
+| Versión de Node.js | ✅ | descarga y verifica versiones viejas si hace falta; `.nvmrc`, `.node-version`, `.tool-versions`, Volta y `engines` cuentan como la versión esperada |
 | Variables de entorno | ✅ | cuando el valor viejo no es secreto, o la variable es nueva |
 | Gestor de paquetes, sistema, `.env` / configuración, código fuente | — | aparecen en las diferencias; para el código te da el comando `git bisect` |
 
-Windows, macOS y Linux, Node.js 20+. Cero dependencias. Inglés y español
+Windows, macOS y Linux, Node.js 16+. Cero dependencias. Inglés y español
 (automático, o `--lang`).
 
 Pruebas inestables: con `--repeat 3` cada configuración se corre tres veces, y
@@ -263,6 +264,7 @@ lastgreen mcp                  servidor MCP para agentes de IA
   --offline             nunca descargar paquetes ni versiones de Node
   --rebuild             correr scripts de instalación (módulos nativos) de lo devuelto
   --repeat <n>          correr cada configuración n veces; si no coinciden, es inestable
+  --node <versión>      comparar con otra versión de Node.js (18, lts/hydrogen, ^20)
   --show-output         mostrar el final de la salida de cada ejecución
   --json                resultado legible por máquinas en stdout
   --lang en|es          idioma (también LASTGREEN_LANG; se detecta solo)
@@ -315,6 +317,7 @@ anticipado lo usan gratis durante la beta.
 - [x] npm, pnpm, versiones de Node.js, variables de entorno
 - [x] GitHub Action, servidor MCP, `--json`
 - [x] `lastgreen init`, pruebas inestables (`--repeat`), PRs de Dependabot y Renovate
+- [x] Node.js 16+, la versión de Node declarada como base, `--node`
 - [ ] Python (uv, pip) y reproducción solo con el lockfile en CI
 - [ ] "¿Qué le cambió el agente a mi máquina?": huellas antes y después de cada sesión de un agente de IA
 - [ ] lastgreen para equipos (alojado)

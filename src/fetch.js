@@ -5,9 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import { checkIntegrity, exists, hashText, mkdirp, rename, rm } from './fsx.js';
+import { download as httpDownload } from './http.js';
 import { defaultResolved, nameFromKey } from './packages.js';
 import { npmCliFor } from './runtime.js';
 
@@ -49,11 +48,13 @@ function runNpmPack(specs, { cwd, env, nodePath, dest }) {
 }
 
 async function download(url, file) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(120_000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const tmp = `${file}.${process.pid}.part`;
-  await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(tmp));
-  rename(tmp, file);
+  try {
+    await httpDownload(url, tmp, { timeoutMs: 120_000 });
+    rename(tmp, file);
+  } finally {
+    rm(tmp);
+  }
 }
 
 /**

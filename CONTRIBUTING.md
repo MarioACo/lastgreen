@@ -11,7 +11,7 @@ cd lastgreen
 node --test          # the whole suite, offline, ~10 s
 ```
 
-No dependencies to install. Node.js 20+.
+No dependencies to install. Node.js 16+ (CI runs 16, 18, 20, 22 and 24).
 
 ## Ground rules
 
