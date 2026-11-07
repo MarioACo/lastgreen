@@ -34,6 +34,7 @@ export function loadConfig(root) {
     command: typeof config.command === 'string' ? config.command : null,
     ignoreEnv: Array.isArray(config.ignoreEnv) ? config.ignoreEnv.map(String) : [],
     timeout: Number(config.timeout) > 0 ? Number(config.timeout) : null,
+    repeat: Number(config.repeat) >= 1 ? Number(config.repeat) : null,
   };
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "lastgreen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "git bisect for your environment: finds and confirms which dependency, Node.js version or env var broke your tests since the last green run. npm, pnpm, CI and AI agents (MCP).",
   "type": "module",
   "bin": {

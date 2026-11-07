@@ -77,7 +77,11 @@ export async function cmdRun(rest) {
   const hidden = path.join(root, 'node_modules', '.package-lock.json');
   const before = mtime(hidden);
   const snapPromise = takeSnapshot(root, process.env, { ignoreEnv: config.ignoreEnv });
-  const result = await runCommand(command, { cwd: process.cwd(), tee: true });
+  // Like `npm run`: local binaries (vitest, jest...) resolve even when called from CI or by hand.
+  const runEnv = { ...process.env };
+  prependPath(runEnv, path.join(root, 'node_modules', '.bin'));
+  if (process.cwd() !== root) prependPath(runEnv, path.join(process.cwd(), 'node_modules', '.bin'));
+  const result = await runCommand(command, { cwd: process.cwd(), env: runEnv, tee: true });
   let snap = await snapPromise;
   if (mtime(hidden) !== before) snap = await takeSnapshot(root, process.env, { ignoreEnv: config.ignoreEnv });
 
@@ -416,6 +420,8 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   const normalize = (set) => couple(set, ids, coupling);
   const keyOf = (set) => [...set].sort().join('|');
   const outputs = new Map();
+  const repeat = Math.max(1, Math.min(10, Math.floor(opts.repeat ?? config.repeat ?? 1)));
+  let executions = 0;
   let runNo = 0;
   let result;
   try {
@@ -426,13 +432,30 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
       async (set) => {
         await ws.apply(set);
         const env = ws.envFor(set, testable, runEnv);
-        const r = await runCommand(command, { cwd, env, timeoutMs, onChild: (ch) => (child = ch) });
-        const outcome = r.code === 0 ? 'pass' : 'fail';
-        outputs.set(keyOf(set), r.tail);
+        // --repeat N: the same configuration must give the same result N times,
+        // otherwise it is "flaky" and never counts as a failure.
+        const results = [];
+        let r;
+        for (let i = 0; i < repeat; i++) {
+          r = await runCommand(command, { cwd, env, timeoutMs, onChild: (ch) => (child = ch) });
+          results.push(r.code === 0);
+          if (results.some((x) => x !== results[0])) break;
+          if (!results[0] && r.tail) outputs.set(keyOf(set), r.tail);
+        }
+        const passes = results.filter(Boolean).length;
+        const outcome = passes === results.length ? 'pass' : passes === 0 ? 'fail' : 'flaky';
+        if (!outputs.has(keyOf(set))) outputs.set(keyOf(set), r.tail);
         runNo++;
-        const mark = outcome === 'pass' ? c.green(`${sym.ok} ${t('pass')}`) : c.red(`${sym.fail} ${t('fail')}`);
+        executions += results.length;
+        const times = results.length > 1 ? ` ×${results.length}` : '';
+        const mark =
+          outcome === 'pass'
+            ? c.green(`${sym.ok} ${t('pass')}${times}`)
+            : outcome === 'fail'
+              ? c.red(`${sym.fail} ${t('fail')}${times}`)
+              : c.yellow(`~ ${t('flaky', results.length - passes, results.length)}`);
         const extra = r.timedOut ? c.yellow(` (${t('timedOut')})`) : '';
-        say(`  ${c.dim(pad(`#${runNo}`, 4))} ${pad(mark, 12)} ${c.dim(pad(seconds(r.durationMs), 9))} ${configLabel(set, testable, coupling)}${extra}`);
+        say(`  ${c.dim(pad(`#${runNo}`, 4))} ${pad(mark, 16)} ${c.dim(pad(seconds(r.durationMs), 9))} ${configLabel(set, testable, coupling)}${extra}`);
         if (opts.showOutput) for (const line of lastLines(r.tail, 6, root)) say(c.dim(`        ${line}`));
         return outcome;
       },
@@ -492,6 +515,14 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     }
   } else if (result.status === 'not-reproduced') {
     say(c.yellow(`${sym.warn} ${t('notReproduced')}`));
+    if (repeat === 1) say(c.cyan('    npx lastgreen why --repeat 3'));
+  } else if (result.status === 'flaky') {
+    say(c.yellow(`${sym.warn} ${t(result.side === 'current' ? 'flakyCurrent' : 'flakyGreen')}`));
+    const where = failingLocations(outputs.get(keyOf(new Set(result.side === 'current' ? ids : []))), root, 2, cwd);
+    if (where.length) {
+      say(c.bold(`  ${t('whereBreaks')}`));
+      for (const w of where) say(`    ${c.cyan(`${w.file}:${w.line}`)}  ${c.dim(w.code)}`);
+    }
   } else if (result.status === 'not-in-env') {
     say(c.yellow(`${sym.warn} ${t('notInEnv')}`));
     const where = failingLocations(outputs.get(keyOf(new Set(ids))), root, 2, cwd);
@@ -511,7 +542,8 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
 
   say('');
   const restoredMsg = wrong.length ? c.red(`${sym.fail} ${t('restoreProblem', wrong.join(', '))}`) : c.green(t('restoredOk'));
-  say(c.dim(`${t('runs', result.runs)} ${sym.dot} ${seconds(Date.now() - started)} ${sym.dot} `) + restoredMsg);
+  const runsText = executions > result.runs ? t('runsRepeated', result.runs, executions) : t('runs', result.runs);
+  say(c.dim(`${runsText} ${sym.dot} ${seconds(Date.now() - started)} ${sym.dot} `) + restoredMsg);
 
   writeStepSummary({ result, culprit, fixes, forward, explained, command, green, diff, wrong, started });
   if (json) {
@@ -524,7 +556,10 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
           fix: fixes,
           fixForward: forward,
           explain: explained,
+          ...(result.side ? { flakySide: result.side } : {}),
           runs: result.runs,
+          executions,
+          repeat,
           durationMs: Date.now() - started,
           restored: wrong.length === 0,
         }),
@@ -536,7 +571,6 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   if (result.status !== 'found' || wrong.length) process.exitCode = 1;
 }
 
-/** In GitHub Actions, add a readable report to the job summary page. */
 /** Human report of "what to change" under the culprit. */
 function printExplain(say, explained, culprit) {
   if (!explained.length) return;
@@ -628,6 +662,8 @@ function writeStepSummary({ result, culprit, fixes, forward = [], explained = []
     md.push(`⚠️ ${t('notInEnv')}`);
   } else if (result.status === 'not-reproduced') {
     md.push(`⚠️ ${t('notReproduced')}`);
+  } else if (result.status === 'flaky') {
+    md.push(`⚠️ ${t(result.side === 'current' ? 'flakyCurrent' : 'flakyGreen')}`);
   } else {
     md.push(`⚠️ ${t('budget', result.runs)}`);
   }

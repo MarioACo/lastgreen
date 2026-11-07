@@ -40,23 +40,16 @@ The usual fix is an afternoon of reading lockfile diffs, reinstalling, and askin
 ## Quick start
 
 ```bash
-# 1. While your tests pass, run them through lastgreen once (or always, see below)
-npx lastgreen run -- npm test
-
-# 2. The day they break
-npx lastgreen why
+npx lastgreen init --ci   # once: records every green run, adds the CI workflow
+npm test                  # as usual; green runs are remembered
+npx lastgreen why         # the day they break
 ```
 
-That's it. To record every green run automatically, wrap your test script:
-
-```json
-{
-  "scripts": { "test": "lastgreen run -- vitest run" },
-  "devDependencies": { "lastgreen": "^0.1.0" }
-}
-```
-
-`lastgreen run` passes your command's output and exit code through untouched and adds one line at the end.
+`init` wraps your test script (`"test": "lastgreen run -- \"vitest run\""`), adds
+lastgreen as a devDependency, writes `.github/workflows/lastgreen.yml` and shows
+how to connect your AI agent. Prefer no setup? `npx lastgreen run -- npm test`
+once while tests pass is enough. `lastgreen run` passes your command's output
+and exit code through untouched and adds one line at the end.
 
 | You say | You run |
 | --- | --- |
@@ -64,6 +57,8 @@ That's it. To record every green run automatically, wrap your test script:
 | "What changed since it last passed?" (runs nothing) | `lastgreen diff` |
 | "It works on my machine." | they run `lastgreen export`, you run `lastgreen why --against lastgreen-export.json` |
 | "CI is red and nobody changed anything." | the [GitHub Action](#in-ci) |
+| "The Dependabot / Renovate PR is red." | the [GitHub Action](#with-dependabot-and-renovate): which bump, which line, which release note |
+| "It only fails sometimes." | `lastgreen why --repeat 3` |
 | "Agent, why did the tests break?" | the [MCP server](#ai-agents-mcp) |
 
 ## How it works
@@ -152,6 +147,23 @@ It fails the job exactly when your tests fail. Outputs: `result` (`green`, `foun
 `not-in-env`…) and `exit-code`. Outside GitHub, `npx lastgreen why --json` gives
 the same result as JSON.
 
+## With Dependabot and Renovate
+
+Update PRs are where the environment changes on purpose, and where it breaks
+most often. With the Action in the workflow (`npx lastgreen init --ci` adds it),
+a red update PR is compared with the green baseline of your default branch:
+
+- **One bump:** confirmed, with the line in your code to change and the release
+  note that explains it.
+- **A grouped Renovate PR** (five updates at once): it tells you which one broke
+  the build, so the other four can be merged.
+- **Two bumps that only fail together:** it says so, instead of blaming one.
+
+It needs no secrets: the Action only reads the baseline artifact (`actions: read`),
+so it works on Dependabot PRs as they are.
+
+<sub>Real example: a Dependabot-style `date-fns` 2 → 3 bump in a vitest project, run like CI (`npm ci`, then the Action's steps). Culprit confirmed in 5 runs, with `src/report.js:7`, the `require('date-fns/format')` line and the changelog entry about named exports, all in the job summary.</sub>
+
 ## AI agents (MCP)
 
 `lastgreen mcp` is a [Model Context Protocol](https://modelcontextprotocol.io)
@@ -217,8 +229,9 @@ export` also strips local paths and test output.
 Windows, macOS and Linux, Node.js 20+. Zero dependencies. English and Spanish
 (automatic, or `--lang`).
 
-It needs a test command that reliably passes or fails: flaky tests show up as
-"not confirmed". Causes outside the machine (a remote API, the date) can't be
+Flaky tests: with `--repeat 3` every configuration runs three times, and one
+whose runs disagree is reported as flaky instead of being blamed on the
+environment. Causes outside the machine (a remote API, the date) can't be
 put back, and then `why` tells you the environment is *not* the cause, which is
 also an answer.
 
@@ -226,6 +239,8 @@ also an answer.
 <summary><b>All commands and options</b></summary>
 
 ```text
+lastgreen init [--ci]          set up: wrap the test script, add the CI workflow, show MCP setup
+                               (--no-install, --dry-run)
 lastgreen run -- <command>     run and record a snapshot (green or red)
 lastgreen why                  find and confirm the culprit
 lastgreen diff                 list changes since the last green, run nothing
@@ -240,6 +255,7 @@ lastgreen mcp                  MCP server for AI agents
   --timeout <seconds>   per run (default: 5x the green run, at least 120)
   --offline             never download packages or Node versions
   --rebuild             run install scripts (native addons) of restored packages
+  --repeat <n>          run each configuration n times; disagreeing runs are flaky
   --show-output         print the end of each run's output
   --json                machine-readable result on stdout
   --lang en|es          language (also LASTGREEN_LANG)
@@ -249,7 +265,7 @@ Project config (optional) in `.lastgreenrc.json` or a `"lastgreen"` key in
 `package.json`:
 
 ```json
-{ "command": "npm test", "ignoreEnv": ["MY_NOISY_*"], "timeout": 300 }
+{ "command": "npm test", "ignoreEnv": ["MY_NOISY_*"], "timeout": 300, "repeat": 2 }
 ```
 
 </details>
@@ -289,6 +305,7 @@ who pushed in the last 90 days). Early-access teams use it free during the beta.
 
 - [x] npm, pnpm, Node.js versions, environment variables
 - [x] GitHub Action, MCP server, `--json`
+- [x] `lastgreen init`, flaky tests (`--repeat`), Dependabot and Renovate PRs
 - [ ] Python (uv, pip) and lockfile-only reproduction in CI
 - [ ] "What did the agent change on my machine?": snapshots around AI agent sessions
 - [ ] lastgreen for teams (hosted)

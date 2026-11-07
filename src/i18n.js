@@ -2,6 +2,25 @@
 // locale (LANG, LC_ALL, system locale) or with LASTGREEN_LANG=es / --lang es.
 
 const en = {
+  initTitle: 'Setting up lastgreen',
+  initTitleDry: 'Setting up lastgreen (dry run: nothing is written)',
+  initNoTest: 'No "test" script in package.json. Add one, or run any command with: npx lastgreen run -- <command>',
+  initAlready: 'The test script already runs through lastgreen',
+  initWrapped: 'The test script now records every green run:',
+  initConfigCommand: '(the original command is in package.json "lastgreen.command", because it has double quotes)',
+  initHasDep: 'lastgreen is already a dependency',
+  initInstallLater: 'Add the dependency:',
+  initInstalling: (cmd) => `Installing: ${cmd}`,
+  initInstalled: 'Added lastgreen as a devDependency',
+  initInstallFailed: 'Could not install it; run it yourself:',
+  initCiNeedsCommand: 'No test command, so no CI workflow was written',
+  initWorkflowExists: '.github/workflows/lastgreen.yml already exists (left as it is)',
+  initWorkflow: 'GitHub Actions workflow written:',
+  initNext: 'Next',
+  initFirstGreen: 'run your tests once while they pass, to save the first green:',
+  initWhenBreaks: 'the day they break:',
+  initCiHint: 'explain red CI runs too:',
+  initMcp: 'Optional: give your AI agent lastgreen as a tool (MCP)',
   noProject: 'No package.json found here or in any parent folder. Run lastgreen inside a Node.js project.',
   busy: (pid) => `Another lastgreen is bisecting this project right now (pid ${pid}). Wait for it to finish.`,
   recovered: (n) => `A previous bisect was interrupted: node_modules restored (${n} change${n === 1 ? '' : 's'} put back).`,
@@ -30,6 +49,10 @@ const en = {
   safety: 'node_modules is changed temporarily and restored at the end, even on Ctrl+C or a crash.',
   interrupted: 'lastgreen: interrupted, node_modules restored.',
   pass: 'pass',
+  flaky: (failed, total) => `flaky (${failed}/${total} failed)`,
+  flakyCurrent: 'The failure is intermittent: the same environment sometimes passes and sometimes fails. That is a flaky test, not an environment change.',
+  flakyGreen: 'Even the last green environment fails sometimes: the tests are flaky, so the environment cannot be blamed reliably.',
+  runsRepeated: (configs, total) => `${configs} configurations, ${total} runs`,
   fail: 'fail',
   timedOut: 'timed out',
   cfgCurrent: 'current environment',
@@ -131,6 +154,7 @@ version, env vars, config) and, when the same code starts failing, puts the old
 pieces back one by one until it finds the change that broke it.
 
 Usage
+  npx lastgreen init [--ci]        set it up: wrap the test script, add CI, show MCP setup
   npx lastgreen run -- <command>   run your tests; saves a snapshot (green or red)
   npx lastgreen why                find and confirm which change broke them
   npx lastgreen diff               list what changed since the last green, run nothing
@@ -147,6 +171,7 @@ Options for why/diff
   --timeout <seconds>   per run (default: 5x the green run, at least 120)
   --offline             do not download old packages or Node versions
   --rebuild             run install scripts (native addons) of restored packages
+  --repeat <n>          run each configuration n times; disagreeing runs count as flaky
   --show-output         print the end of each run's output
   --json                machine-readable result on stdout (for CI and AI agents)
 
@@ -155,6 +180,25 @@ Global
 };
 
 const es = {
+  initTitle: 'Configurando lastgreen',
+  initTitleDry: 'Configurando lastgreen (simulación: no se escribe nada)',
+  initNoTest: 'No hay script "test" en package.json. Agrega uno, o corre cualquier comando con: npx lastgreen run -- <comando>',
+  initAlready: 'El script de pruebas ya pasa por lastgreen',
+  initWrapped: 'El script de pruebas ahora guarda cada verde:',
+  initConfigCommand: '(el comando original quedó en "lastgreen.command" de package.json, porque tiene comillas dobles)',
+  initHasDep: 'lastgreen ya es una dependencia',
+  initInstallLater: 'Agrega la dependencia:',
+  initInstalling: (cmd) => `Instalando: ${cmd}`,
+  initInstalled: 'lastgreen quedó como devDependency',
+  initInstallFailed: 'No se pudo instalar; córrelo tú:',
+  initCiNeedsCommand: 'No hay comando de pruebas, así que no se escribió el workflow de CI',
+  initWorkflowExists: '.github/workflows/lastgreen.yml ya existe (no se tocó)',
+  initWorkflow: 'Workflow de GitHub Actions creado:',
+  initNext: 'Lo que sigue',
+  initFirstGreen: 'corre tus pruebas una vez mientras pasan, para guardar el primer verde:',
+  initWhenBreaks: 'el día que se rompan:',
+  initCiHint: 'explica también los rojos de CI:',
+  initMcp: 'Opcional: dale lastgreen a tu agente de IA como herramienta (MCP)',
   noProject: 'No encontré package.json aquí ni en carpetas superiores. Ejecuta lastgreen dentro de un proyecto de Node.js.',
   busy: (pid) => `Otro lastgreen está buscando en este proyecto ahora mismo (pid ${pid}). Espera a que termine.`,
   recovered: (n) => `Una búsqueda anterior se interrumpió: node_modules restaurado (${n} cambio${n === 1 ? '' : 's'} devuelto${n === 1 ? '' : 's'}).`,
@@ -183,6 +227,10 @@ const es = {
   safety: 'node_modules se modifica temporalmente y se restaura al final, incluso con Ctrl+C o si algo se cae.',
   interrupted: 'lastgreen: interrumpido, node_modules restaurado.',
   pass: 'pasa',
+  flaky: (failed, total) => `inestable (${failed}/${total} fallan)`,
+  flakyCurrent: 'El fallo es intermitente: el mismo entorno a veces pasa y a veces falla. Eso es una prueba inestable, no un cambio del entorno.',
+  flakyGreen: 'Hasta el entorno del último verde falla a veces: las pruebas son inestables y no se puede culpar al entorno con certeza.',
+  runsRepeated: (configs, total) => `${configs} configuraciones, ${total} ejecuciones`,
   fail: 'falla',
   timedOut: 'tiempo agotado',
   cfgCurrent: 'entorno actual',
@@ -284,6 +332,7 @@ Node, variables de entorno, configuración) y, cuando el mismo código empieza a
 fallar, devuelve las piezas viejas una por una hasta encontrar el cambio que lo rompió.
 
 Uso
+  npx lastgreen init [--ci]        configúralo: envuelve las pruebas, agrega CI, muestra MCP
   npx lastgreen run -- <comando>   corre tus pruebas; guarda una huella (verde o roja)
   npx lastgreen why                encuentra y confirma qué cambio las rompió
   npx lastgreen diff               lista lo que cambió desde el último verde, sin ejecutar
@@ -300,6 +349,7 @@ Opciones de why/diff
   --timeout <segundos>  por ejecución (por defecto: 5x el verde, mínimo 120)
   --offline             no descargar paquetes ni versiones de Node
   --rebuild             ejecutar scripts de instalación (módulos nativos) de lo restaurado
+  --repeat <n>          correr cada configuración n veces; si no coinciden, cuenta como inestable
   --show-output         mostrar el final de la salida de cada ejecución
   --json                resultado legible por máquinas en stdout (CI y agentes de IA)
 
@@ -383,7 +433,7 @@ export function factorLabel(f, { long = false, short = false } = {}) {
     case 'system':
       return `${f.from} ${arrow} ${f.to}`;
     case 'code':
-      return `git ${f.from?.slice(0, 7) ?? '?'} ${arrow} ${f.to?.slice(0, 7) ?? '?'}${f.fileCount ? ` +${f.fileCount}` : ''}`;
+      return `git${f.headChanged && (f.from || f.to) ? ` ${f.from?.slice(0, 7) ?? '-'} ${arrow} ${f.to?.slice(0, 7) ?? '-'}` : ''}${f.fileCount ? ` +${f.fileCount} ${f.fileCount === 1 ? 'file' : 'files'}` : ''}`;
     default:
       return f.name;
   }

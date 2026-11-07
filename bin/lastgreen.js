@@ -11,10 +11,10 @@ if (major < 20) {
 }
 
 const VALUE_FLAGS = { '-c': 'command', '--command': 'command', '--against': 'against', '--max-runs': 'maxRuns',
-  '--timeout': 'timeout', '-o': 'out', '--out': 'out', '-n': 'n', '--lang': 'lang' };
+  '--timeout': 'timeout', '--repeat': 'repeat', '-o': 'out', '--out': 'out', '-n': 'n', '--lang': 'lang' };
 const BOOL_FLAGS = { '--dry-run': 'dryRun', '--offline': 'offline', '--rebuild': 'rebuild', '--json': 'json', '--show-output': 'showOutput',
-  '--now': 'now', '--no-color': 'noColor', '-h': 'help', '--help': 'help', '-v': 'version', '--version': 'version' };
-const NUMERIC = new Set(['maxRuns', 'timeout', 'n']);
+  '--now': 'now', '--ci': 'ci', '--no-install': 'noInstall', '--no-color': 'noColor', '-h': 'help', '--help': 'help', '-v': 'version', '--version': 'version' };
+const NUMERIC = new Set(['maxRuns', 'timeout', 'n', 'repeat']);
 
 function parse(argv) {
   const opts = {};
@@ -72,6 +72,10 @@ async function main() {
       return cmdLog(opts);
     case 'restore':
       return cmdRestore();
+    case 'init': {
+      const { cmdInit } = await import('../src/init.js');
+      return cmdInit(opts, UserError);
+    }
     case 'mcp': {
       const { serve } = await import('../src/mcp.js');
       return serve();

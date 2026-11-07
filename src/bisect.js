@@ -10,7 +10,9 @@
 
 /**
  * @param {string[]} ids testable factor ids, most suspicious first
- * @param {(current: Set<string>) => Promise<'pass'|'fail'>} test
+ * @param {(current: Set<string>) => Promise<'pass'|'fail'|'flaky'>} test
+ *   'flaky' (runs of the same configuration disagree) never counts as a failure:
+ *   the search only follows configurations that fail every time.
  * @param {{maxRuns?: number, firstGuess?: string|null, normalize?: (s: Set<string>) => Set<string>}} options
  *   normalize turns a requested configuration into a consistent one (dependency coupling)
  */
@@ -32,8 +34,12 @@ export async function findCulprit(ids, test, { maxRuns = 60, firstGuess = null, 
   };
 
   try {
-    if ((await t(ids)) === 'pass') return { status: 'not-reproduced', runs };
-    if ((await t([])) === 'fail') return { status: 'not-in-env', runs };
+    const now = await t(ids);
+    if (now === 'pass') return { status: 'not-reproduced', runs };
+    if (now === 'flaky') return { status: 'flaky', side: 'current', runs };
+    const before = await t([]);
+    if (before === 'fail') return { status: 'not-in-env', runs };
+    if (before === 'flaky') return { status: 'flaky', side: 'green', runs };
 
     let c = ids;
     // Cheap first guess: a single, strongly suspected factor (named in the error output).
