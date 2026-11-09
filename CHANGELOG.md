@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `lastgreen why --from-git [ref]` can reconstruct an npm baseline from a
+  package-lock or shrinkwrap in Git when no green run was saved. It supports npm
+  lockfiles v1-v3 and automatically chooses `HEAD` for uncommitted lockfile
+  changes or `HEAD^` for a committed update.
+
 ## 0.3.0
 
 - **Runs on Node.js 16 and 18 too** (was 20+), so projects that still live on an

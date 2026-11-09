@@ -7,7 +7,7 @@ import path from 'node:path';
 import { captureEnv } from './env.js';
 import { capture } from './exec.js';
 import { hashFile, hashText, readJson } from './fsx.js';
-import { readInstalled } from './packages.js';
+import { packagesFromNpmLock, readInstalled } from './packages.js';
 import { managerVersion, npmVersionFor, probeNode } from './runtime.js';
 
 export const VERSION = readJson(new URL('../package.json', import.meta.url), {})?.version ?? '0.0.0';
@@ -110,6 +110,66 @@ export async function takeSnapshot(root, env, { ignoreEnv = [] } = {}) {
     env: captureEnv(env, { ignore: ignoreEnv }),
     git,
   };
+}
+
+/** Build an npm baseline from a package-lock/shrinkwrap stored in Git. */
+export async function takeGitSnapshot(root, current, requestedRef = null) {
+  const repo = await capture('git', ['rev-parse', '--show-toplevel'], { cwd: root });
+  if (!repo) return { error: 'repo' };
+  const relRoot = path.relative(repo, root);
+  if (relRoot.startsWith('..') || path.isAbsolute(relRoot)) return { error: 'repo' };
+  const gitPath = (name) => (relRoot && relRoot !== '.' ? `${relRoot.split(path.sep).join('/')}/${name}` : name);
+  const showAt = (commit, name) => capture('git', ['show', `${commit}:${gitPath(name)}`], { cwd: repo, timeoutMs: 15_000 });
+
+  let ref = requestedRef;
+  if (!ref) {
+    const trackedLock = ['npm-shrinkwrap.json', 'package-lock.json'].find((name) => fs.existsSync(path.join(root, name)));
+    const changed = trackedLock
+      ? await capture('git', ['diff', '--name-only', 'HEAD', '--', gitPath(trackedLock)], { cwd: repo, timeoutMs: 15_000 })
+      : '';
+    ref = changed ? 'HEAD' : 'HEAD^';
+  }
+  const commit = await capture('git', ['rev-parse', '--verify', `${ref}^{commit}`], { cwd: repo, timeoutMs: 15_000 });
+  if (!commit) return { error: 'ref', ref };
+
+  const packageText = await showAt(commit, 'package.json');
+  if (!packageText) return { error: 'package', ref };
+  let pkg;
+  try {
+    pkg = JSON.parse(packageText);
+  } catch {
+    return { error: 'package', ref };
+  }
+  let lockName = 'npm-shrinkwrap.json';
+  let lockText = await showAt(commit, lockName);
+  if (!lockText) {
+    lockName = 'package-lock.json';
+    lockText = await showAt(commit, lockName);
+  }
+  if (!lockText) return { error: 'lock', ref };
+  let lock;
+  try {
+    lock = JSON.parse(lockText);
+  } catch {
+    return { error: 'lock', ref };
+  }
+  const packages = packagesFromNpmLock(lock, pkg);
+  if (!packages) return { error: 'lock', ref };
+  const at = (await capture('git', ['show', '-s', '--format=%cI', commit], { cwd: repo, timeoutMs: 15_000 })) || new Date().toISOString();
+  const snapshot = JSON.parse(JSON.stringify(current));
+  snapshot.at = at;
+  snapshot.status = 'git';
+  snapshot.manager = 'npm';
+  snapshot.layout = 'hoisted';
+  snapshot.packages = packages;
+  snapshot.git = { head: commit, branch: null, dirty: {}, dirtyCount: 0 };
+  snapshot.gitBaseline = { ref, commit };
+  snapshot.files = { ...(current.files ?? {}) };
+  delete snapshot.files['package-lock.json'];
+  delete snapshot.files['npm-shrinkwrap.json'];
+  snapshot.files['package.json'] = hashText(packageText);
+  snapshot.files[lockName] = hashText(lockText);
+  return { snapshot };
 }
 
 /** Copy that is safe to send to a teammate: no output, no local paths. */

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { captureEnv, isNoise, prependPath, setEnv } from '../src/env.js';
 import { computeDiff, mentionedPackages, versionLevel } from '../src/diff.js';
-import { pnpmName, readInstalled } from '../src/packages.js';
+import { packagesFromNpmLock, pnpmName, readInstalled } from '../src/packages.js';
 import { shellJoin } from '../src/exec.js';
 import { install, packageTarball, tmpDir, writeProject } from './helpers.js';
 
@@ -124,6 +124,39 @@ test('readInstalled uses the hidden lockfile and falls back to disk when it is s
   assert.equal(got.source, 'walk');
   assert.equal(got.packages['node_modules/a'].version, '1.0.9');
   assert.equal(got.packages['node_modules/a/node_modules/b'].version, '2.0.0');
+});
+
+test('npm lockfiles v1-v3 become a bisectable installed tree', () => {
+  const pkg = { dependencies: { a: '^1.0.0' }, devDependencies: { dev: '^2.0.0' } };
+  const modern = packagesFromNpmLock(
+    {
+      lockfileVersion: 3,
+      packages: {
+        '': {},
+        'node_modules/a': { version: '1.0.0', integrity: 'sha512-a', dependencies: { b: '^1.0.0' } },
+        'node_modules/a/node_modules/b': { version: '1.2.0' },
+        'node_modules/dev': { version: '2.0.0' },
+        'node_modules/local': { resolved: 'packages/local', link: true },
+      },
+    },
+    pkg,
+  );
+  assert.equal(modern['node_modules/a'].direct, 'prod');
+  assert.deepEqual(modern['node_modules/a'].deps, { b: '^1.0.0' });
+  assert.equal(modern['node_modules/dev'].direct, 'dev');
+  assert.equal(modern['node_modules/local'], undefined);
+
+  const legacy = packagesFromNpmLock(
+    {
+      lockfileVersion: 1,
+      dependencies: {
+        a: { version: '1.0.0', requires: { b: '^1.0.0' }, dependencies: { b: { version: '1.2.0' } } },
+      },
+    },
+    pkg,
+  );
+  assert.equal(legacy['node_modules/a'].direct, 'prod');
+  assert.equal(legacy['node_modules/a/node_modules/b'].version, '1.2.0');
 });
 
 test('pnpm store folder names', () => {

@@ -9,7 +9,7 @@ import { explainCulprits, failingLocations } from './explain.js';
 import { ago, factorLabel, reasonText, t } from './i18n.js';
 import { declaredNode, downloadNode, findNodeDir, nodeIndex, nodeSpecSatisfied, probeNode, resolveNodeSpec } from './runtime.js';
 import { unwrapTestScript } from './init.js';
-import { redact, takeSnapshot, VERSION } from './snapshot.js';
+import { redact, takeGitSnapshot, takeSnapshot, VERSION } from './snapshot.js';
 import { Store, cacheDir, findRoot, loadConfig } from './store.js';
 import { c, configureFor, createWriter, pad, seconds, sym } from './ui.js';
 import { prependPath } from './env.js';
@@ -177,9 +177,11 @@ function groupForDisplay(factors, coupling) {
 function printDiff(say, diff, green) {
   if (green.declared) {
     say(`${c.bold(t('comparingDeclared', green.declared.spec, green.declared.source, green.node.version))}${green.command ? ` ${sym.dot} ${green.command}` : ''}`);
+  } else if (green.gitBaseline) {
+    say(`${c.bold(t('comparingGit', green.gitBaseline.ref, green.gitBaseline.commit.slice(0, 7)))}${green.command ? ` ${sym.dot} ${green.command}` : ''}`);
   }
   const when = green.exported ? t('exportedFrom', ago(green.at)) : ago(green.at);
-  if (!green.declared) say(`${c.bold(t('lastGreen'))}  ${when}${green.command ? ` ${sym.dot} ${green.command}` : ''}${green.durationMs ? ` ${sym.dot} ${seconds(green.durationMs)}` : ''}`);
+  if (!green.declared && !green.gitBaseline) say(`${c.bold(t('lastGreen'))}  ${when}${green.command ? ` ${sym.dot} ${green.command}` : ''}${green.durationMs ? ` ${sym.dot} ${seconds(green.durationMs)}` : ''}`);
   if (!diff.factors.length) return;
   const groups = groupForDisplay(diff.factors, diff.coupling);
   const testable = groups.filter((g) => g.factor.testable);
@@ -297,8 +299,17 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   recoverIfNeeded(root, store, say);
   const config = loadConfig(root);
 
-  let green = opts.node ? null : opts.against ? loadSnapshotFile(opts.against) : store.latest('green');
   const current = await takeSnapshot(root, process.env, { ignoreEnv: config.ignoreEnv });
+  if (opts.fromGit && (opts.against || opts.node)) throw new UserError(t('fromGitConflict'));
+  let green = opts.node ? null : opts.against ? loadSnapshotFile(opts.against) : store.latest('green');
+  if (opts.fromGit) {
+    const got = await takeGitSnapshot(root, current, opts.fromGit === true ? null : String(opts.fromGit));
+    if (!got.snapshot) throw new UserError(t(`gitBaseline.${got.error}`, got.ref));
+    green = got.snapshot;
+    const pkg = readJson(path.join(root, 'package.json'), {});
+    green.command = config.command ?? unwrapTestScript(pkg?.scripts?.test, pkg?.lastgreen) ?? defaultCommand(root, current.manager);
+    green.cwd = path.relative(root, process.cwd()).split(path.sep).join('/');
+  }
   if (!green) {
     // No green run to compare with: use the Node version asked for (--node) or the
     // one the project declares (.nvmrc, engines...). Everything else stays as it is.
@@ -327,7 +338,8 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   printDiff(say, diff, green);
   const summary = (extra) => ({
     version: VERSION,
-    lastGreen: green.at,
+    lastGreen: green.gitBaseline ? null : green.at,
+    ...(green.gitBaseline ? { baseline: { type: 'git', ref: green.gitBaseline.ref, commit: green.gitBaseline.commit } } : {}),
     changes: diff.factors.map((f) => ({ kind: f.kind, name: f.name, change: f.change, from: f.from, to: f.to, testable: f.testable, reason: f.reason })),
     ...extra,
   });

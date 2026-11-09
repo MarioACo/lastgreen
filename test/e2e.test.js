@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { BIN, cli, install, packageTarball, tmpDir, versionOnDisk, writeProject } from './helpers.js';
 
 const TEST_FILE = `
@@ -57,6 +57,11 @@ function assertTree(root, tree, absent = []) {
   for (const key of absent) assert.equal(fs.existsSync(path.join(root, ...key.split('/'))), false, `${key} should not exist`);
   assert.equal(fs.existsSync(path.join(root, 'node_modules', '.lastgreen-stash')), false, 'stash left behind');
   assert.equal(fs.existsSync(path.join(root, '.lastgreen', 'journal.json')), false, 'journal left behind');
+}
+
+function git(root, args) {
+  const r = spawnSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+  assert.equal(r.status, 0, r.stderr);
 }
 
 test('finds the package that broke the tests, among many changes, and restores node_modules', async () => {
@@ -129,6 +134,29 @@ test('without a green run it explains what to do', async () => {
   const r = cli(root, ['why']);
   assert.equal(r.code, 1);
   assert.match(r.stderr, /No green run saved/);
+});
+
+test('without a saved green, --from-git bisects against the npm lockfile in Git', async () => {
+  const { root, redTree } = await fixture();
+  fs.copyFileSync(path.join(root, 'node_modules', '.package-lock.json'), path.join(root, 'package-lock.json'));
+  git(root, ['init', '-q']);
+  git(root, ['config', 'user.email', 'lastgreen@example.test']);
+  git(root, ['config', 'user.name', 'lastgreen test']);
+  git(root, ['add', 'package.json', 'package-lock.json', 'test.js']);
+  git(root, ['commit', '-qm', 'green dependencies']);
+
+  await install(root, redTree);
+  fs.copyFileSync(path.join(root, 'node_modules', '.package-lock.json'), path.join(root, 'package-lock.json'));
+  const r = cli(root, ['why', '--from-git', '--command', 'node test.js', '--json', '--offline']);
+  assert.equal(r.code, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'found', r.stderr);
+  assert.equal(out.confirmed, true, r.stderr);
+  assert.equal(out.baseline.type, 'git');
+  assert.equal(out.baseline.ref, 'HEAD');
+  assert.equal(out.lastGreen, null);
+  assert.deepEqual(out.culprit.map((f) => f.name), ['alpha']);
+  assertTree(root, redTree, ['node_modules/gone']);
 });
 
 test('an upgrade that also removed dependencies is still confirmed (chalk 4 -> 5 case)', async () => {

@@ -51,6 +51,11 @@ how to connect your AI agent. Prefer no setup? `npx lastgreen run -- npm test`
 once while tests pass is enough. `lastgreen run` passes your command's output
 and exit code through untouched and adds one line at the end.
 
+Already broken, with no saved green? `npx lastgreen why --from-git` uses the
+npm lockfile from `HEAD` when it has uncommitted changes, otherwise from
+`HEAD^`. Pass a commit, branch or tag to choose explicitly:
+`npx lastgreen why --from-git main`.
+
 | You say | You run |
 | --- | --- |
 | "It worked yesterday." | `lastgreen why` |
@@ -244,6 +249,7 @@ lastgreen init [--ci]          set up: wrap the test script, add the CI workflow
                                (--no-install, --dry-run)
 lastgreen run -- <command>     run and record a snapshot (green or red)
 lastgreen why                  find and confirm the culprit
+lastgreen why --from-git [ref] use an npm lockfile from Git when no green was saved
 lastgreen diff                 list changes since the last green, run nothing
 lastgreen export [-o file]     share your last green environment
 lastgreen log                  list saved snapshots
@@ -252,6 +258,7 @@ lastgreen mcp                  MCP server for AI agents
 
   -c, --command <cmd>   command to re-run (default: the one from the last green)
   --against <file>      compare with an exported snapshot
+  --from-git [ref]      use npm lockfile from Git (HEAD if dirty, otherwise HEAD^)
   --max-runs <n>        give up after n runs (default 60)
   --timeout <seconds>   per run (default: 5x the green run, at least 120)
   --offline             never download packages or Node versions

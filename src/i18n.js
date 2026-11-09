@@ -34,6 +34,12 @@ const en = {
   runWhy: 'find the culprit:',
   badSnapshot: (file) => `${file} is not a lastgreen snapshot.`,
   noGreen: 'No green run saved for this project yet.\nRun your tests through lastgreen once while they pass:  npx lastgreen run -- npm test',
+  fromGitConflict: '--from-git cannot be combined with --against or --node.',
+  'gitBaseline.repo': 'Could not read Git history for this project.',
+  'gitBaseline.ref': (ref) => `Could not resolve Git ref "${ref}". Pass an existing commit, branch or tag.`,
+  'gitBaseline.package': (ref) => `Git ref "${ref}" has no valid package.json for this project.`,
+  'gitBaseline.lock': (ref) => `Git ref "${ref}" has no usable npm package-lock.json or npm-shrinkwrap.json.`,
+  comparingGit: (ref, commit) => `Using npm dependencies from Git ${ref} (${commit}) as the baseline`,
   lastGreen: 'Last green',
   exportedFrom: (when) => `exported snapshot, ${when}`,
   changesSince: (n) => `${n} change${n === 1 ? '' : 's'} since then`,
@@ -165,6 +171,7 @@ Usage
   npx lastgreen diff               list what changed since the last green, run nothing
   npx lastgreen export [-o file]   share your last green environment with a teammate
   npx lastgreen why --against file   "works on my machine": compare with theirs
+  npx lastgreen why --from-git [ref] use npm dependencies from Git when no green was saved
   npx lastgreen log                list saved snapshots
   npx lastgreen restore            restore node_modules after an interrupted bisect
   npx lastgreen mcp                MCP server for AI agents (Claude Code, Codex, Cursor)
@@ -172,6 +179,7 @@ Usage
 Options for why/diff
   -c, --command <cmd>   command to re-run (default: the one from the last green)
   --against <file>      compare with an exported snapshot instead of the last green
+  --from-git [ref]      use npm lockfile from ref (default: HEAD if dirty, otherwise HEAD^)
   --max-runs <n>        give up after n runs (default 60)
   --timeout <seconds>   per run (default: 5x the green run, at least 120)
   --offline             do not download old packages or Node versions
@@ -186,6 +194,12 @@ Global
 };
 
 const es = {
+  fromGitConflict: '--from-git no se puede combinar con --against ni --node.',
+  'gitBaseline.repo': 'No pude leer el historial de Git de este proyecto.',
+  'gitBaseline.ref': (ref) => `No pude resolver la referencia de Git "${ref}". Indica un commit, rama o tag existente.`,
+  'gitBaseline.package': (ref) => `La referencia de Git "${ref}" no contiene un package.json válido para este proyecto.`,
+  'gitBaseline.lock': (ref) => `La referencia de Git "${ref}" no contiene un package-lock.json o npm-shrinkwrap.json utilizable.`,
+  comparingGit: (ref, commit) => `Usando las dependencias npm de Git ${ref} (${commit}) como base`,
   initTitle: 'Configurando lastgreen',
   initTitleDry: 'Configurando lastgreen (simulación: no se escribe nada)',
   initNoTest: 'No hay script "test" en package.json. Agrega uno, o corre cualquier comando con: npx lastgreen run -- <comando>',
@@ -349,6 +363,7 @@ Uso
   npx lastgreen diff               lista lo que cambió desde el último verde, sin ejecutar
   npx lastgreen export [-o archivo]   comparte tu último verde con un compañero
   npx lastgreen why --against archivo   "en mi máquina sí funciona": compara con el suyo
+  npx lastgreen why --from-git [ref] usa dependencias npm de Git si no se guardó un verde
   npx lastgreen log                lista las huellas guardadas
   npx lastgreen restore            restaura node_modules tras una búsqueda interrumpida
   npx lastgreen mcp                servidor MCP para agentes de IA (Claude Code, Codex, Cursor)
@@ -356,6 +371,7 @@ Uso
 Opciones de why/diff
   -c, --command <cmd>   comando a repetir (por defecto: el del último verde)
   --against <archivo>   compara con una huella exportada en vez del último verde
+  --from-git [ref]      usa el lockfile npm de ref (HEAD si está modificado; si no, HEAD^)
   --max-runs <n>        rendirse tras n ejecuciones (60 por defecto)
   --timeout <segundos>  por ejecución (por defecto: 5x el verde, mínimo 120)
   --offline             no descargar paquetes ni versiones de Node

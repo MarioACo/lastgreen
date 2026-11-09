@@ -64,26 +64,56 @@ export function directDeps(pkgJson) {
   return out;
 }
 
+/** Turn an npm package-lock/shrinkwrap (v1-v3) into lastgreen's installed tree. */
+export function packagesFromNpmLock(lock, pkgJson = {}) {
+  if (!lock || (!lock.packages && !lock.dependencies)) return null;
+  const out = {};
+  if (lock.packages) {
+    for (const [key, e] of Object.entries(lock.packages)) {
+      if (!key.includes('node_modules/') || e.link || !e.version) continue;
+      const keyName = nameFromKey(key);
+      const name = e.name && e.name !== keyName ? e.name : undefined;
+      out[key] = clean({
+        name,
+        version: e.version,
+        resolved: compactResolved(e.name ?? keyName, e.version, e.resolved),
+        integrity: e.integrity,
+        script: e.hasInstallScript || undefined,
+        os: e.os,
+        cpu: e.cpu,
+        deps: depsOf(e),
+      });
+    }
+  } else {
+    const visit = (dependencies, parent = '') => {
+      for (const [name, e] of Object.entries(dependencies ?? {})) {
+        if (!e?.version) continue;
+        const key = parent ? `${parent}/node_modules/${name}` : `node_modules/${name}`;
+        out[key] = clean({
+          version: e.version,
+          resolved: compactResolved(name, e.version, e.resolved),
+          integrity: e.integrity,
+          script: e.hasInstallScript || undefined,
+          os: e.os,
+          cpu: e.cpu,
+          deps: Object.keys(e.requires ?? {}).length ? e.requires : undefined,
+        });
+        visit(e.dependencies, key);
+      }
+    };
+    visit(lock.dependencies);
+  }
+  const direct = directDeps(pkgJson);
+  for (const [name, kind] of Object.entries(direct)) {
+    const entry = out[`node_modules/${name}`];
+    if (entry) entry.direct = kind;
+  }
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => a.localeCompare(b)));
+}
+
 function readHiddenLockfile(root) {
   const lock = readJson(path.join(root, 'node_modules', '.package-lock.json'));
-  if (!lock?.packages) return null;
-  const out = {};
-  for (const [key, e] of Object.entries(lock.packages)) {
-    if (!key.includes('node_modules/') || e.link || !e.version) continue;
-    const keyName = nameFromKey(key);
-    const name = e.name && e.name !== keyName ? e.name : undefined;
-    out[key] = clean({
-      name,
-      version: e.version,
-      resolved: compactResolved(e.name ?? keyName, e.version, e.resolved),
-      integrity: e.integrity,
-      script: e.hasInstallScript || undefined,
-      os: e.os,
-      cpu: e.cpu,
-      deps: depsOf(e),
-    });
-  }
-  return out;
+  return packagesFromNpmLock(lock);
 }
 
 /** The hidden lockfile can go stale (manual edits, other tools). Spot-check direct deps on disk. */

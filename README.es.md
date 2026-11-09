@@ -52,6 +52,10 @@ correr `npx lastgreen run -- npm test` una vez mientras las pruebas pasan.
 `lastgreen run` deja pasar intactos la salida y el código de salida de tu comando,
 y solo agrega una línea al final.
 
+¿Ya está roto y no guardaste un verde? `npx lastgreen why --from-git` usa el
+lockfile npm de `HEAD` si tiene cambios sin commit; si no, usa `HEAD^`. También
+puedes elegir un commit, rama o tag: `npx lastgreen why --from-git main`.
+
 | Tú dices | Tú corres |
 | --- | --- |
 | "Ayer funcionaba." | `lastgreen why` |
@@ -251,6 +255,7 @@ lastgreen init [--ci]          configúralo: envuelve las pruebas, agrega el wor
                                (--no-install, --dry-run)
 lastgreen run -- <comando>     ejecuta y guarda una huella (verde o roja)
 lastgreen why                  encuentra y confirma al culpable
+lastgreen why --from-git [ref] usa un lockfile npm de Git si no guardaste un verde
 lastgreen diff                 lista los cambios desde el último verde, sin ejecutar
 lastgreen export [-o archivo]  comparte tu último verde
 lastgreen log                  lista las huellas guardadas
@@ -259,6 +264,7 @@ lastgreen mcp                  servidor MCP para agentes de IA
 
   -c, --command <cmd>   comando a repetir (por defecto: el del último verde)
   --against <archivo>   compara con una huella exportada
+  --from-git [ref]      usa el lockfile npm de Git (HEAD si cambió; si no, HEAD^)
   --max-runs <n>        rendirse tras n ejecuciones (60 por defecto)
   --timeout <segundos>  por ejecución (por defecto: 5x el verde, mínimo 120)
   --offline             nunca descargar paquetes ni versiones de Node

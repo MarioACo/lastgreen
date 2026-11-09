@@ -28,7 +28,9 @@ function parse(argv) {
       break;
     }
     const [flag, inline] = arg.startsWith('--') && arg.includes('=') ? [arg.slice(0, arg.indexOf('=')), arg.slice(arg.indexOf('=') + 1)] : [arg, undefined];
-    if (VALUE_FLAGS[flag]) {
+    if (flag === '--from-git') {
+      opts.fromGit = inline ?? (command && argv[i + 1] && !argv[i + 1].startsWith('-') ? argv[++i] : true);
+    } else if (VALUE_FLAGS[flag]) {
       const value = inline ?? argv[++i];
       if (value === undefined) throw new UserError(`${flag} needs a value`);
       const key = VALUE_FLAGS[flag];
