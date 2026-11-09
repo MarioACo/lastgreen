@@ -96,12 +96,13 @@ test('automatic sandbox isolates the original project and --no-sandbox is an exp
   assert.equal(cli(root, ['run', '--', 'node', 'test.js']).code, 0);
   await install(root, redTree);
   const marker = path.join(root, 'node_modules', 'sandbox-ran');
+  const leaked = path.join(root, '..', 'token-leaked');
   fs.writeFileSync(
     path.join(root, 'test.js'),
-    `require('fs').writeFileSync(__dirname + '/node_modules/sandbox-ran', 'yes');\n${TEST_FILE}`,
+    `require('fs').writeFileSync(__dirname + '/node_modules/sandbox-ran', 'yes');\nif (process.env.LASTGREEN_GITHUB_TOKEN) require('fs').writeFileSync(${JSON.stringify(leaked)}, 'leaked');\n${TEST_FILE}`,
   );
 
-  let r = cli(root, ['why', '--json', '--offline']);
+  let r = cli(root, ['why', '--json', '--offline'], { LASTGREEN_GITHUB_TOKEN: 'write-capable-token' });
   assert.equal(r.code, 0, r.stderr);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'found', r.stderr);
@@ -116,6 +117,7 @@ test('automatic sandbox isolates the original project and --no-sandbox is an exp
   assert.ok(out.configurations.every((run) => ['pass', 'fail', 'flaky'].includes(run.outcome)));
   assert.deepEqual(out.culprit.map((f) => f.name), ['alpha']);
   assert.equal(fs.existsSync(marker), false, 'the test command ran in the original project');
+  assert.equal(fs.existsSync(leaked), false, 'the test command received LASTGREEN_GITHUB_TOKEN');
   assertTree(root, redTree, ['node_modules/gone']);
   assert.match(r.stderr, /isolated copy/);
 

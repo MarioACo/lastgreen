@@ -6,6 +6,10 @@
   confidence, failure evidence, every tested configuration, reproduction data
   and exact fixes. JSON exposes the same trace, and the GitHub Action uploads
   the Markdown report as an artifact.
+- The GitHub Action can opt into `comment-on-pr: true`: it creates or updates
+  one concise diagnosis comment, links the full artifact, and degrades to a
+  warning when repository token policy does not allow comments. Its write token
+  is stripped before any user test command is re-run.
 - `lastgreen why` now isolates automatically: it preflights project size and
   free disk space, skips disposable caches, uses copy-on-write when available,
   and removes abandoned sandboxes. `--sandbox` requires isolation and

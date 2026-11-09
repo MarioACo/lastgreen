@@ -135,6 +135,7 @@ summary page.
 permissions:
   contents: read
   actions: read
+  pull-requests: write # only needed for comment-on-pr
 
 jobs:
   test:
@@ -147,6 +148,7 @@ jobs:
       - uses: MarioACo/lastgreen@v0
         with:
           command: npm test
+          comment-on-pr: true
 ```
 
 It fails the job exactly when your tests fail. Outputs: `result` (`green`, `found`,
@@ -159,6 +161,15 @@ npx lastgreen why --report lastgreen-report.md
 ```
 
 `npx lastgreen why --json` exposes the same configuration trace as structured data.
+
+PR comments are opt-in. Lastgreen creates one comment with a hidden marker and
+updates it on later runs instead of adding duplicates. If GitHub keeps the token
+read-only (for example, some fork policies), the Action emits a warning and the
+job summary/report artifact still work. It does not use `pull_request_target` or
+run untrusted PR code in a privileged follow-up; the write-capable token is also
+removed from the environment before Lastgreen re-runs the test command. GitHub
+documents the Dependabot token rules and the `pull-requests: write` opt-in in its
+[Dependabot Actions troubleshooting guide](https://docs.github.com/en/code-security/reference/supply-chain-security/troubleshoot-dependabot/dependabot-on-actions).
 
 ## With Dependabot and Renovate
 

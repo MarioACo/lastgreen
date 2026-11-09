@@ -224,7 +224,7 @@ async function githubReleases({ owner, repo }, name, from, to, { cacheDir, env }
   const hit = cacheDir && cached(cacheDir, cacheName, 24 * 3600_000);
   if (hit) releases = JSON.parse(hit);
   if (!releases) {
-    const token = env.GITHUB_TOKEN || env.GH_TOKEN;
+    const token = env.LASTGREEN_GITHUB_TOKEN || env.GITHUB_TOKEN || env.GH_TOKEN;
     releases = await getJson(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`, {
       Accept: 'application/vnd.github+json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),

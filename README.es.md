@@ -139,6 +139,7 @@ en el resumen del job.
 permissions:
   contents: read
   actions: read
+  pull-requests: write # solo hace falta para comment-on-pr
 
 jobs:
   test:
@@ -151,6 +152,7 @@ jobs:
       - uses: MarioACo/lastgreen@v0
         with:
           command: npm test
+          comment-on-pr: true
 ```
 
 El job falla exactamente cuando fallan tus pruebas. Salidas: `result` (`green`,
@@ -164,6 +166,16 @@ npx lastgreen why --report lastgreen-report.md
 ```
 
 `npx lastgreen why --json` expone la misma traza como datos estructurados.
+
+Los comentarios en PR son opcionales. Lastgreen crea un comentario con un
+marcador oculto y lo actualiza en las siguientes ejecuciones, sin generar spam.
+Si GitHub mantiene el token como solo lectura (por ejemplo, según la política de
+forks), la Action muestra una advertencia y el resumen/artefacto siguen
+funcionando. No usa `pull_request_target` ni ejecuta código no confiable del PR
+en un proceso privilegiado; además, quita el token con permisos de escritura del
+entorno antes de que Lastgreen vuelva a ejecutar las pruebas. GitHub documenta
+las reglas de Dependabot y el permiso `pull-requests: write` en su
+[guía de Dependabot para Actions](https://docs.github.com/en/code-security/reference/supply-chain-security/troubleshoot-dependabot/dependabot-on-actions).
 
 ## Con Dependabot y Renovate
 

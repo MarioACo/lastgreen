@@ -16,8 +16,11 @@ inputs:
     description: Branch whose green runs become the baseline. Defaults to the repository default branch.
     default: ''
   github-token:
-    description: Token used to read the baseline artifact (needs actions:read).
+    description: Token used to read the baseline and, when enabled, comment on the PR.
     default: ${{ github.token }}
+  comment-on-pr:
+    description: Create or update a diagnosis comment on pull requests (requires pull-requests: write).
+    default: 'false'
 
 outputs:
   result:
@@ -29,6 +32,12 @@ outputs:
   report:
     description: Path to the Markdown diagnosis when tests fail.
     value: ${{ steps.why.outputs.report }}
+  report-url:
+    description: URL of the uploaded Markdown diagnosis artifact.
+    value: ${{ steps.report-upload.outputs.artifact-url }}
+  comment:
+    description: "created, updated, failed, or empty when PR comments are disabled/not applicable"
+    value: ${{ steps.comment.outputs.status }}
 
 runs:
   using: composite
@@ -73,6 +82,7 @@ runs:
       env:
         LG: ${{ github.action_path }}/bin/lastgreen.js
         GH_TOKEN: ${{ inputs.github-token }}
+        LASTGREEN_GITHUB_TOKEN: ${{ inputs.github-token }}
         BRANCH: ${{ inputs.baseline-branch || github.event.repository.default_branch }}
       run: |
         dir="$RUNNER_TEMP/lastgreen-download"
@@ -86,6 +96,7 @@ runs:
         fi
         gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$dir/baseline.zip"
         unzip -o -q "$dir/baseline.zip" -d "$dir"
+        unset GH_TOKEN GITHUB_TOKEN
         set +e
         node "$LG" --lang en why --against "$dir/lastgreen-baseline.json" --report "$dir/lastgreen-report.md" --json > "$dir/why.json"
         status=$(node -e "try { console.log(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).status) } catch { console.log('error') }" "$dir/why.json")
@@ -95,6 +106,7 @@ runs:
         exit 0
 
     - name: Upload the diagnosis report
+      id: report-upload
       if: steps.run.outputs.code != '0' && steps.why.outputs.report != ''
       uses: actions/upload-artifact@v4
       with:
@@ -102,6 +114,36 @@ runs:
         path: ${{ steps.why.outputs.report }}
         if-no-files-found: ignore
         retention-days: 30
+
+    - name: Comment the diagnosis on the pull request
+      id: comment
+      if: steps.run.outputs.code != '0' && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' && steps.why.outputs.report != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPORT_URL: ${{ steps.report-upload.outputs.artifact-url }}
+      run: |
+        body="$RUNNER_TEMP/lastgreen-comment.md"
+        node "$GITHUB_ACTION_PATH/scripts/pr-comment.mjs" "${{ steps.why.outputs.report }}" "$body" "$REPORT_URL"
+        id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" --paginate \
+          --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- lastgreen-diagnosis -->"))) | .id' 2>/dev/null | tail -n 1)
+        set +e
+        if [ -n "$id" ]; then
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" >/dev/null
+          code=$?
+          status=updated
+        else
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
+          code=$?
+          status=created
+        fi
+        if [ "$code" -ne 0 ]; then
+          status=failed
+          echo "::warning::lastgreen could not comment on PR #$PR_NUMBER. Enable pull-requests: write or leave comment-on-pr disabled."
+        fi
+        echo "status=$status" >> "$GITHUB_OUTPUT"
+        exit 0
 
     - name: Keep the test result
       if: steps.run.outputs.code != '0'

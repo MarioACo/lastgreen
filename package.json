@@ -10,6 +10,7 @@
     "bin",
     "src",
     "scripts/bench-sandbox.mjs",
+    "scripts/pr-comment.mjs",
     "action.yml",
     "README.md",
     "README.es.md",

@@ -7,6 +7,7 @@ import { computeDiff, mentionedPackages, versionLevel } from '../src/diff.js';
 import { packagesFromNpmLock, pnpmName, readInstalled } from '../src/packages.js';
 import { shellJoin } from '../src/exec.js';
 import { cleanupStaleSandboxes, createSandbox } from '../src/sandbox.js';
+import { PR_COMMENT_MARKER, renderPrComment } from '../src/pr-comment.js';
 import { install, packageTarball, tmpDir, writeProject } from './helpers.js';
 
 test('env: noise is ignored, secrets are hash-only, behavioural values are kept', () => {
@@ -228,6 +229,46 @@ test('sandbox cleanup removes dead owners but not a live process', () => {
   assert.equal(cleanupStaleSandboxes({ tempRoot }), 1);
   assert.equal(fs.existsSync(dead), false);
   assert.equal(fs.existsSync(live), true);
+});
+
+test('PR comments are concise, collapsible and safe to update by marker', () => {
+  const report = `# lastgreen diagnosis report
+
+Generated: 2026-11-08T00:00:00.000Z
+
+## Diagnosis
+
+✅ **Culprit confirmed:** \`alpha 1.0.0 → 1.0.1\`
+
+## Evidence
+
+- Current failed.
+
+## Configurations tested
+
+| # | Outcome | Changes kept current |
+| ---: | --- | --- |
+| 1 | fail | alpha |
+
+<details><summary>2 changes</summary>
+
+- alpha
+
+</details>
+
+## Reproduce
+
+- Command: \`npm test\`
+`;
+  const comment = renderPrComment(report, { artifactUrl: 'https://example.test/artifact/1' });
+  assert.ok(comment.startsWith(PR_COMMENT_MARKER));
+  assert.equal(comment.match(new RegExp(PR_COMMENT_MARKER, 'g')).length, 1);
+  assert.match(comment, /Culprit confirmed/);
+  assert.match(comment, /<details><summary>Configurations tested<\/summary>/);
+  assert.match(comment, /\| 1 \| fail \| alpha \|/);
+  assert.doesNotMatch(comment, /2 changes/);
+  assert.doesNotMatch(comment, /## Reproduce/);
+  assert.match(comment, /Download the full diagnosis report/);
 });
 
 test('semver ranges the way npm reads them', async () => {

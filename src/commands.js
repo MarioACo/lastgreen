@@ -506,6 +506,9 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   ws.nodeDir = preparedNodeDir;
   // Like `npm run`: local binaries (vitest, jest, tsc...) resolve without npx.
   const runEnv = { ...process.env, LASTGREEN_BISECT: '1' };
+  // The Action uses this token for public release-note lookups after testing.
+  // Never expose a write-capable GitHub token to the user's test command.
+  for (const key of Object.keys(runEnv)) if (key.toUpperCase() === 'LASTGREEN_GITHUB_TOKEN') delete runEnv[key];
   prependPath(runEnv, path.join(executionRoot, 'node_modules', '.bin'));
   if (executionCwd !== executionRoot) prependPath(runEnv, path.join(executionCwd, 'node_modules', '.bin'));
 
