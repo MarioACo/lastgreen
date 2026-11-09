@@ -9,6 +9,7 @@
   "files": [
     "bin",
     "src",
+    "scripts/bench-sandbox.mjs",
     "action.yml",
     "README.md",
     "README.es.md",

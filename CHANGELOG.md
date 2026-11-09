@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `lastgreen why --report <file.md>` writes a shareable diagnosis with
+  confidence, failure evidence, every tested configuration, reproduction data
+  and exact fixes. JSON exposes the same trace, and the GitHub Action uploads
+  the Markdown report as an artifact.
 - `lastgreen why` now isolates automatically: it preflights project size and
   free disk space, skips disposable caches, uses copy-on-write when available,
   and removes abandoned sandboxes. `--sandbox` requires isolation and

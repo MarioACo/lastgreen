@@ -67,6 +67,29 @@ const en = {
   sandboxConflict: 'Use either --sandbox or --no-sandbox, not both.',
   sandboxSkippedCwd: 'The saved test working directory is outside the project, so automatic isolation was disabled.',
   sandboxCwd: 'The saved test working directory is outside the project, so it cannot run in the sandbox.',
+  reportTitle: 'lastgreen diagnosis report',
+  reportGenerated: 'Generated',
+  reportDiagnosis: 'Diagnosis',
+  reportConfidence: 'Confidence',
+  reportConfirmed: 'confirmed by reversing the change',
+  reportProbable: 'probable; reverse confirmation did not pass',
+  reportEvidence: 'Evidence',
+  reportCurrentFailed: 'The current environment reproduced the failure.',
+  reportBaselinePassed: 'The last green environment passed the same command.',
+  reportRevertPassed: 'Reverting only the culprit made the command pass.',
+  reportExecutions: 'Configurations tested',
+  reportOutcome: 'Outcome',
+  reportFlaky: 'flaky',
+  reportDuration: 'Duration',
+  reportConfiguration: 'Changes kept current',
+  reportGreenConfiguration: 'last green environment',
+  reportReproduce: 'Reproduce',
+  reportWorkingDirectory: 'Working directory',
+  reportCommand: 'Command',
+  reportIsolation: 'Isolation',
+  reportRestoration: 'Restoration',
+  reportWritten: (file) => `Report written to ${file}`,
+  reportFailed: (message) => `Could not write the report: ${message}`,
   interrupted: 'lastgreen: interrupted, node_modules restored.',
   pass: 'pass',
   flaky: (failed, total) => `flaky (${failed}/${total} failed)`,
@@ -199,6 +222,7 @@ Options for why/diff
   --repeat <n>          run each configuration n times; disagreeing runs count as flaky
   --node <version>      compare with another Node.js version (18, lts/hydrogen, ^20), no green run needed
   --show-output         print the end of each run's output
+  --report <file.md>    write a reproducible Markdown diagnosis
   --json                machine-readable result on stdout (for CI and AI agents)
 
 Global
@@ -271,6 +295,29 @@ const es = {
   sandboxConflict: 'Usa --sandbox o --no-sandbox, no ambos.',
   sandboxSkippedCwd: 'La carpeta de trabajo guardada está fuera del proyecto; desactivé el aislamiento automático.',
   sandboxCwd: 'La carpeta de trabajo guardada está fuera del proyecto y no puede ejecutarse en el sandbox.',
+  reportTitle: 'reporte de diagnóstico de lastgreen',
+  reportGenerated: 'Generado',
+  reportDiagnosis: 'Diagnóstico',
+  reportConfidence: 'Confianza',
+  reportConfirmed: 'confirmado al revertir el cambio',
+  reportProbable: 'probable; la confirmación inversa no pasó',
+  reportEvidence: 'Evidencia',
+  reportCurrentFailed: 'El entorno actual reprodujo el fallo.',
+  reportBaselinePassed: 'El último entorno verde pasó el mismo comando.',
+  reportRevertPassed: 'Revertir únicamente al culpable hizo pasar el comando.',
+  reportExecutions: 'Configuraciones probadas',
+  reportOutcome: 'Resultado',
+  reportFlaky: 'inestable',
+  reportDuration: 'Duración',
+  reportConfiguration: 'Cambios mantenidos actuales',
+  reportGreenConfiguration: 'último entorno verde',
+  reportReproduce: 'Reproducir',
+  reportWorkingDirectory: 'Directorio de trabajo',
+  reportCommand: 'Comando',
+  reportIsolation: 'Aislamiento',
+  reportRestoration: 'Restauración',
+  reportWritten: (file) => `Reporte guardado en ${file}`,
+  reportFailed: (message) => `No pude guardar el reporte: ${message}`,
   interrupted: 'lastgreen: interrumpido, node_modules restaurado.',
   pass: 'pasa',
   flaky: (failed, total) => `inestable (${failed}/${total} fallan)`,
@@ -403,6 +450,7 @@ Opciones de why/diff
   --repeat <n>          correr cada configuración n veces; si no coinciden, cuenta como inestable
   --node <versión>      comparar con otra versión de Node.js (18, lts/hydrogen, ^20), sin verde previo
   --show-output         mostrar el final de la salida de cada ejecución
+  --report <archivo.md> guardar un diagnóstico Markdown reproducible
   --json                resultado legible por máquinas en stdout (CI y agentes de IA)
 
 Globales

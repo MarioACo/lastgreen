@@ -150,8 +150,15 @@ jobs:
 ```
 
 It fails the job exactly when your tests fail. Outputs: `result` (`green`, `found`,
-`not-in-env`…) and `exit-code`. Outside GitHub, `npx lastgreen why --json` gives
-the same result as JSON.
+`not-in-env`…), `exit-code`, and `report`. A failed run uploads a reproducible
+Markdown diagnosis with the culprit, confidence, evidence, every configuration
+tested and exact fixes. Outside GitHub, create the same report with:
+
+```bash
+npx lastgreen why --report lastgreen-report.md
+```
+
+`npx lastgreen why --json` exposes the same configuration trace as structured data.
 
 ## With Dependabot and Renovate
 
@@ -289,6 +296,7 @@ lastgreen mcp                  MCP server for AI agents
   --repeat <n>          run each configuration n times; disagreeing runs are flaky
   --node <version>      compare with another Node.js version (18, lts/hydrogen, ^20)
   --show-output         print the end of each run's output
+  --report <file.md>    write a reproducible Markdown diagnosis
   --json                machine-readable result on stdout
   --lang en|es          language (also LASTGREEN_LANG)
 ```
@@ -336,7 +344,7 @@ who pushed in the last 90 days). Early-access teams use it free during the beta.
 ## Roadmap
 
 - [x] npm, pnpm, Node.js versions, environment variables
-- [x] GitHub Action, MCP server, `--json`
+- [x] GitHub Action, MCP server, `--json`, reproducible Markdown reports
 - [x] `lastgreen init`, flaky tests (`--repeat`), Dependabot and Renovate PRs
 - [x] Node.js 16+, the declared Node version as a baseline, `--node`
 - [ ] Python (uv, pip) and lockfile-only reproduction in CI

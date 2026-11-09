@@ -154,8 +154,16 @@ jobs:
 ```
 
 El job falla exactamente cuando fallan tus pruebas. Salidas: `result` (`green`,
-`found`, `not-in-env`…) y `exit-code`. Fuera de GitHub, `npx lastgreen why
---json` da el mismo resultado en JSON.
+`found`, `not-in-env`…), `exit-code` y `report`. Una ejecución fallida sube un
+diagnóstico Markdown reproducible con culpable, confianza, evidencia, todas las
+configuraciones probadas y soluciones exactas. Fuera de GitHub genera el mismo
+reporte con:
+
+```bash
+npx lastgreen why --report lastgreen-report.md
+```
+
+`npx lastgreen why --json` expone la misma traza como datos estructurados.
 
 ## Con Dependabot y Renovate
 
@@ -296,6 +304,7 @@ lastgreen mcp                  servidor MCP para agentes de IA
   --repeat <n>          correr cada configuración n veces; si no coinciden, es inestable
   --node <versión>      comparar con otra versión de Node.js (18, lts/hydrogen, ^20)
   --show-output         mostrar el final de la salida de cada ejecución
+  --report <archivo.md> guardar un diagnóstico Markdown reproducible
   --json                resultado legible por máquinas en stdout
   --lang en|es          idioma (también LASTGREEN_LANG; se detecta solo)
 ```
@@ -345,7 +354,7 @@ anticipado lo usan gratis durante la beta.
 ## Próximamente
 
 - [x] npm, pnpm, versiones de Node.js, variables de entorno
-- [x] GitHub Action, servidor MCP, `--json`
+- [x] GitHub Action, servidor MCP, `--json`, reportes Markdown reproducibles
 - [x] `lastgreen init`, pruebas inestables (`--repeat`), PRs de Dependabot y Renovate
 - [x] Node.js 16+, la versión de Node declarada como base, `--node`
 - [ ] Python (uv, pip) y reproducción solo con el lockfile en CI

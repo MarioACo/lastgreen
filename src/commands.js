@@ -542,6 +542,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   const normalize = (set) => couple(set, ids, coupling);
   const keyOf = (set) => [...set].sort().join('|');
   const outputs = new Map();
+  const configurations = [];
   const repeat = Math.max(1, Math.min(10, Math.floor(opts.repeat ?? config.repeat ?? 1)));
   let executions = 0;
   let runNo = 0;
@@ -557,9 +558,13 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
         // --repeat N: the same configuration must give the same result N times,
         // otherwise it is "flaky" and never counts as a failure.
         const results = [];
+        let runDurationMs = 0;
+        let timedOut = false;
         let r;
         for (let i = 0; i < repeat; i++) {
           r = await runCommand(command, { cwd: executionCwd, env, timeoutMs, onChild: (ch) => (child = ch) });
+          runDurationMs += r.durationMs;
+          timedOut ||= Boolean(r.timedOut);
           results.push(r.code === 0);
           if (results.some((x) => x !== results[0])) break;
           if (!results[0] && r.tail) outputs.set(keyOf(set), r.tail);
@@ -569,6 +574,14 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
         if (!outputs.has(keyOf(set))) outputs.set(keyOf(set), r.tail);
         runNo++;
         executions += results.length;
+        configurations.push({
+          run: runNo,
+          outcome,
+          attempts: results.length,
+          durationMs: runDurationMs,
+          timedOut,
+          current: [...set].map((id) => factorLabel(testable.find((f) => f.id === id), { short: true })),
+        });
         const times = results.length > 1 ? ` ×${results.length}` : '';
         const mark =
           outcome === 'pass'
@@ -614,6 +627,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   const fixes = [];
   const forward = [];
   let explained = [];
+  let failureExcerpt = [];
   if (result.status === 'found') {
     const head = result.confirmed ? c.green(`${sym.ok} ${t(culprit.length > 1 ? 'culpritsConfirmed' : 'culpritConfirmed')}`) : c.yellow(`${sym.warn} ${t('culpritProbable')}`);
     say(c.bold(head));
@@ -630,6 +644,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     say(c.dim(`    ${result.confirmed ? t('confirmedHow', command) : t('notConfirmedHow')}`));
     const failing = outputs.get(keyOf(normalize(new Set(result.culprit)))) ?? outputs.get(keyOf(new Set(ids)));
     const lines = errorLines(failing, root);
+    failureExcerpt = lines;
     if (lines.length) {
       say('');
       say(c.dim(`    ${t('errorWas')}`));
@@ -686,7 +701,11 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   const runsText = executions > result.runs ? t('runsRepeated', result.runs, executions) : t('runs', result.runs);
   say(c.dim(`${runsText} ${sym.dot} ${seconds(Date.now() - started)} ${sym.dot} `) + restoredMsg);
 
-  writeStepSummary({ result, culprit, fixes, forward, explained, command, green, diff, wrong, started });
+  const reportFile = writeReports(
+    { result, culprit, fixes, forward, explained, failureExcerpt, command, green, diff, wrong, started, configurations, isolation, root, cwd },
+    opts.report,
+  );
+  if (reportFile) say(c.green(t('reportWritten', path.relative(process.cwd(), reportFile) || reportFile)));
   if (json) {
     process.stdout.write(
       `${JSON.stringify(
@@ -700,6 +719,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
           ...(result.side ? { flakySide: result.side } : {}),
           runs: result.runs,
           executions,
+          configurations,
           repeat,
           durationMs: Date.now() - started,
           restored: wrong.length === 0,
@@ -779,14 +799,17 @@ function forwardLines(explained, culprit) {
   return out;
 }
 
-function writeStepSummary({ result, culprit, fixes, forward = [], explained = [], command, green, diff, wrong, started }) {
-  const file = process.env.GITHUB_STEP_SUMMARY;
-  if (!file) return;
+function buildReport({ result, culprit, fixes, forward = [], explained = [], failureExcerpt = [], command, green, diff, wrong, started, configurations = [], isolation, root, cwd }) {
   const code = (text) => '`' + String(text).replace(/`/g, "'") + '`';
-  const md = ['### lastgreen', ''];
+  const cell = (text) => String(text).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  const md = [`# ${t('reportTitle')}`, '', `${t('reportGenerated')}: ${new Date().toISOString()}`, '', `## ${t('reportDiagnosis')}`, ''];
   if (result.status === 'found') {
     const title = culprit.length > 1 ? 'culpritsConfirmed' : result.confirmed ? 'culpritConfirmed' : 'culpritProbable';
     md.push(`${result.confirmed ? '✅' : '⚠️'} **${t(title)}** ${culprit.map((f) => code(factorLabel(f))).join(', ')}`);
+    md.push('', `**${t('reportConfidence')}:** ${result.confirmed ? t('reportConfirmed') : t('reportProbable')}`);
+    md.push('', `## ${t('reportEvidence')}`, '', `- ${t('reportCurrentFailed')}`, `- ${t('reportBaselinePassed')}`);
+    if (result.confirmed) md.push(`- ${t('reportRevertPassed')}`);
+    if (failureExcerpt.length) md.push('', '```text', ...failureExcerpt.map((line) => line.slice(0, 240)), '```');
     const where = explained[0]?.where ?? [];
     if (where.length) md.push('', `**${t('whereBreaks')}**`, '', ...where.map((w) => `- ${code(`${w.file}:${w.line}`)} ${code(w.code)}`));
     for (const e of explained) {
@@ -798,7 +821,7 @@ function writeStepSummary({ result, culprit, fixes, forward = [], explained = []
       }
       for (const d of e.node?.deprecations ?? []) md.push('', `**${d.id}** ${code(d.title)} (${d.type}): ${d.text} ${d.url}`);
     }
-    if (fixes.length) md.push('', `**${t('fix')}:**`, '', '```', ...fixes, ...forward, '```');
+    if (fixes.length || forward.length) md.push('', `**${t('fix')}:**`, '', '```', ...fixes, ...forward, '```');
   } else if (result.status === 'not-in-env') {
     md.push(`⚠️ ${t('notInEnv')}`);
   } else if (result.status === 'not-reproduced') {
@@ -808,16 +831,50 @@ function writeStepSummary({ result, culprit, fixes, forward = [], explained = []
   } else {
     md.push(`⚠️ ${t('budget', result.runs)}`);
   }
+  if (configurations.length) {
+    md.push('', `## ${t('reportExecutions')}`, '', `| # | ${t('reportOutcome')} | ${t('reportDuration')} | ${t('reportConfiguration')} |`, '| ---: | --- | ---: | --- |');
+    for (const run of configurations) {
+      const config = run.current.length ? run.current.join(', ') : t('reportGreenConfiguration');
+      const label = run.outcome === 'pass' ? t('pass') : run.outcome === 'fail' ? t('fail') : t('reportFlaky');
+      const outcome = `${label}${run.attempts > 1 ? ` ×${run.attempts}` : ''}${run.timedOut ? ` (${t('timedOut')})` : ''}`;
+      md.push(`| ${run.run} | ${cell(outcome)} | ${(run.durationMs / 1000).toFixed(2)} s | ${cell(config)} |`);
+    }
+  }
   md.push('', `<details><summary>${t('changesSince', diff.factors.length)}</summary>`, '');
   for (const f of diff.factors.slice(0, 50)) {
     md.push(`- ${t(`kind.${f.kind}`)}: ${code(factorLabel(f, { long: true }))}${f.testable ? '' : ` (${reasonText(f)})`}`);
   }
-  md.push('', '</details>', '');
-  const tail = wrong.length ? ` · ${t('restoreProblem', wrong.join(', '))}` : '';
-  md.push(`${t('lastGreen')}: ${green.at} · ${code(command)} · ${t('runs', result.runs)} · ${seconds(Date.now() - started)}${tail}`);
+  md.push('', '</details>', '', `## ${t('reportReproduce')}`, '');
+  const baseline = green.gitBaseline ? `${green.gitBaseline.ref} (${green.gitBaseline.commit?.slice(0, 12)})` : green.at;
+  md.push(`- ${t('lastGreen')}: ${code(baseline)}`, `- ${t('reportWorkingDirectory')}: ${code(path.relative(root, cwd) || '.')}`, `- ${t('reportCommand')}: ${code(command)}`);
+  if (isolation) {
+    const details = isolation.used
+      ? `${isolation.mode}; ${isolation.strategy}; ${isolation.files} files; ${(isolation.bytes / 1024 / 1024).toFixed(1)} MB; ${isolation.scanMs + isolation.copyMs} ms`
+      : `${isolation.mode}${isolation.fallback ? `; ${isolation.fallback.code}: ${isolation.fallback.message}` : ''}`;
+    md.push(`- ${t('reportIsolation')}: ${cell(details)}`);
+  }
+  const tail = wrong.length ? t('restoreProblem', wrong.join(', ')) : t('restoredOk');
+  md.push(`- ${t('reportRestoration')}: ${cell(tail)}`, `- lastgreen: ${VERSION}`, '', `_${t('runs', result.runs)} · ${seconds(Date.now() - started)}_`, '');
+  return `${md.join('\n')}\n`;
+}
+
+function writeReports(args, requested) {
+  const markdown = buildReport(args);
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (summary) {
+    try {
+      fs.appendFileSync(summary, markdown.replace(/^# /, '### '));
+    } catch {}
+  }
+  if (!requested) return null;
+  const file = path.resolve(process.cwd(), requested);
   try {
-    fs.appendFileSync(file, `${md.join('\n')}\n`);
-  } catch {}
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, markdown);
+    return file;
+  } catch (err) {
+    throw new UserError(t('reportFailed', err.message));
+  }
 }
 
 function printCodeHint(say, diff, green, command) {

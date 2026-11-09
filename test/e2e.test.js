@@ -112,6 +112,8 @@ test('automatic sandbox isolates the original project and --no-sandbox is an exp
   assert.ok(out.isolation.files > 0);
   assert.ok(out.isolation.requiredBytes > out.isolation.bytes);
   assert.match(out.isolation.strategy, /^(copy|copy-on-write|mixed)$/);
+  assert.ok(out.configurations.length >= 3);
+  assert.ok(out.configurations.every((run) => ['pass', 'fail', 'flaky'].includes(run.outcome)));
   assert.deepEqual(out.culprit.map((f) => f.name), ['alpha']);
   assert.equal(fs.existsSync(marker), false, 'the test command ran in the original project');
   assertTree(root, redTree, ['node_modules/gone']);
@@ -258,12 +260,22 @@ test('writes a GitHub Actions job summary', async () => {
   assert.equal(cli(root, ['run', '--', 'node', 'test.js']).code, 0);
   await install(root, redTree);
   const summary = path.join(root, '..', 'summary.md');
-  const r = cli(root, ['why'], { GITHUB_STEP_SUMMARY: summary });
+  const report = path.join(root, '..', 'diagnosis.md');
+  const r = cli(root, ['why', '--report', report], { GITHUB_STEP_SUMMARY: summary });
   assert.equal(r.code, 0, r.stderr);
   const md = fs.readFileSync(summary, 'utf8');
   assert.match(md, /### lastgreen/);
   assert.match(md, /Culprit confirmed:\*\* `alpha 1\.0\.0 → 1\.0\.1`/);
   assert.match(md, /npm install --save-exact alpha@1\.0\.0/);
+  const diagnosis = fs.readFileSync(report, 'utf8');
+  assert.match(diagnosis, /^# lastgreen diagnosis report/);
+  assert.match(diagnosis, /## Evidence/);
+  assert.match(diagnosis, /add\(2, 3\) returned/);
+  assert.match(diagnosis, /## Configurations tested/);
+  assert.match(diagnosis, /\| 1 \| (pass|fail)/);
+  assert.match(diagnosis, /Working directory.*`\.`/);
+  assert.match(diagnosis, /Isolation.*auto/);
+  assert.match(r.stdout, /Report written to/);
 });
 
 test('--rebuild runs the install script of a restored native package', async () => {
