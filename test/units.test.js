@@ -188,10 +188,33 @@ test('sandbox copies the project, excludes lastgreen state and cleans up idempot
   assert.equal(fs.readFileSync(path.join(sandbox.root, 'node_modules', 'a', 'index.js'), 'utf8'), 'package');
   assert.equal(fs.existsSync(path.join(sandbox.root, '.lastgreen')), false);
   assert.equal(fs.existsSync(path.join(sandbox.root, 'node_modules', '.cache')), false);
+  assert.equal(sandbox.excludedPaths, 2);
+  assert.match(sandbox.strategy, /^(copy|copy-on-write|mixed)$/);
+  assert.ok(sandbox.requiredBytes > sandbox.bytes);
   assert.equal(fs.existsSync(sandbox.base), true);
   sandbox.cleanup();
   sandbox.cleanup();
   assert.equal(fs.existsSync(sandbox.base), false);
+});
+
+test('sandbox preflight rejects low disk and a failed copy leaves no partial sandbox', () => {
+  const tempRoot = tmpDir();
+  const root = path.join(tempRoot, 'project');
+  fs.mkdirSync(root);
+  fs.writeFileSync(path.join(root, 'source.js'), 'source');
+  assert.throws(
+    () => createSandbox(root, { tempRoot, availableBytes: 0 }),
+    (err) => err.code === 'ENOSPC' && err.details.requiredBytes > 0,
+  );
+  assert.throws(
+    () => createSandbox(root, { tempRoot, availableBytes: Number.MAX_SAFE_INTEGER, copyFile: () => {
+      const err = new Error('locked');
+      err.code = 'EACCES';
+      throw err;
+    } }),
+    (err) => err.code === 'EACCES',
+  );
+  assert.deepEqual(fs.readdirSync(tempRoot).filter((name) => name.startsWith('lastgreen-sandbox-')), []);
 });
 
 test('sandbox cleanup removes dead owners but not a live process', () => {

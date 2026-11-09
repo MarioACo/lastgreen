@@ -221,6 +221,20 @@ args = ["-y", "lastgreen", "mcp"]
 - **No se ejecutan scripts de instalación**, salvo que uses `--rebuild` (para
   módulos nativos).
 
+La telemetría local del sandbox aparece en `why --json` bajo `isolation`: modo,
+si se usó aislamiento, archivos/bytes, rutas de caché omitidas, tiempos de
+escaneo/copia, estrategia de copia, presupuesto de disco y el motivo exacto del
+fallback cuando no fue posible aislar. Para medir un monorepo sintético grande
+sin guardar fixtures:
+
+```text
+npm run bench:sandbox -- --files 50000 --file-bytes 1024
+node scripts/bench-sandbox.mjs --files 200000 --file-bytes 16384
+```
+
+El benchmark verifica la copia y las exclusiones, imprime JSON y elimina todos
+los datos generados. CI ejecuta una versión menor en Windows, macOS y Linux.
+
 ## Privacidad
 
 Las huellas se quedan en `.lastgreen/`, que git ignora automáticamente. No se

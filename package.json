@@ -19,7 +19,8 @@
     "node": ">=16"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "bench:sandbox": "node scripts/bench-sandbox.mjs"
   },
   "keywords": [
     "bisect",

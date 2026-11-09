@@ -216,6 +216,19 @@ args = ["-y", "lastgreen", "mcp"]
   nodejs.org, checked against the official SHA-256 sums.
 - **No install scripts run** unless you pass `--rebuild` (for native addons).
 
+Sandbox telemetry is included in `why --json` under `isolation`: mode, whether
+isolation was used, file/byte counts, cache paths skipped, scan/copy time,
+copy strategy, disk budget and the exact fallback reason when isolation was not
+possible. To benchmark a large synthetic monorepo without keeping fixtures:
+
+```text
+npm run bench:sandbox -- --files 50000 --file-bytes 1024
+node scripts/bench-sandbox.mjs --files 200000 --file-bytes 16384
+```
+
+The benchmark verifies the copy and cache exclusions, prints JSON, and removes
+all generated data. CI runs a smaller version on Windows, macOS and Linux.
+
 ## Privacy
 
 Snapshots stay in `.lastgreen/`, which git ignores automatically. Nothing about

@@ -26,9 +26,26 @@ function inside(parent, child) {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
-function copyTree(sourceRoot, sandboxRoot) {
+function copyTree(sourceRoot, sandboxRoot, { copyFile } = {}) {
   let files = 0;
   let bytes = 0;
+  let cloneSupported = copyFile ? false : null;
+  let strategy = copyFile ? 'custom' : 'copy';
+  const copyOne = (source, dest) => {
+    if (copyFile) return copyFile(source, dest);
+    if (cloneSupported !== false && fs.constants.COPYFILE_FICLONE_FORCE != null) {
+      try {
+        fs.copyFileSync(source, dest, fs.constants.COPYFILE_FICLONE_FORCE);
+        cloneSupported = true;
+        if (strategy === 'copy') strategy = 'copy-on-write';
+        return;
+      } catch {
+        if (cloneSupported) strategy = 'mixed';
+        cloneSupported = false;
+      }
+    }
+    fs.copyFileSync(source, dest);
+  };
   const copy = (source, dest, top = false) => {
     const stat = fs.lstatSync(source);
     if (stat.isSymbolicLink()) {
@@ -61,9 +78,7 @@ function copyTree(sourceRoot, sandboxRoot) {
     }
     if (!stat.isFile()) return;
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    // COPYFILE_FICLONE is copy-on-write where supported and a normal copy
-    // elsewhere, so isolation does not have to make large monorepos slow.
-    fs.copyFileSync(source, dest, fs.constants.COPYFILE_FICLONE ?? 0);
+    copyOne(source, dest);
     try {
       fs.chmodSync(dest, stat.mode);
     } catch {}
@@ -71,19 +86,23 @@ function copyTree(sourceRoot, sandboxRoot) {
     bytes += stat.size;
   };
   copy(sourceRoot, sandboxRoot, true);
-  return { files, bytes };
+  return { files, bytes, strategy };
 }
 
 function projectSize(root) {
   let files = 0;
   let bytes = 0;
+  let excludedPaths = 0;
   const visit = (source, top = false) => {
     const stat = fs.lstatSync(source);
     if (stat.isSymbolicLink()) return;
     if (stat.isDirectory()) {
       for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
         const child = path.join(source, entry.name);
-        if (skip(path.relative(root, child))) continue;
+        if (skip(path.relative(root, child))) {
+          excludedPaths++;
+          continue;
+        }
         if (top && entry.name === '.git' && !entry.isDirectory()) continue;
         visit(child);
       }
@@ -93,7 +112,7 @@ function projectSize(root) {
     }
   };
   visit(root, true);
-  return { files, bytes };
+  return { files, bytes, excludedPaths };
 }
 
 function freeBytes(at) {
@@ -147,13 +166,16 @@ export function cleanupStaleSandboxes({ tempRoot = os.tmpdir(), maxUnknownAgeMs 
 }
 
 /** Copy a project into an owned temporary directory. Cleanup is idempotent. */
-export function createSandbox(root, { tempRoot = os.tmpdir() } = {}) {
+export function createSandbox(root, { tempRoot = os.tmpdir(), availableBytes, copyFile } = {}) {
+  const started = Date.now();
   const estimate = projectSize(root);
-  const available = freeBytes(tempRoot);
+  const scanMs = Date.now() - started;
+  const available = availableBytes === undefined ? freeBytes(tempRoot) : availableBytes;
   const required = estimate.bytes + Math.max(MIN_FREE, Math.ceil(estimate.bytes * 0.1));
   if (available != null && available < required) {
     const err = new Error(`need ${(required / 1024 / 1024).toFixed(0)} MB free, but only ${(available / 1024 / 1024).toFixed(0)} MB is available`);
     err.code = 'ENOSPC';
+    err.details = { ...estimate, scanMs, availableBytes: available, requiredBytes: required };
     throw err;
   }
   const resolvedTemp = path.resolve(tempRoot);
@@ -169,10 +191,31 @@ export function createSandbox(root, { tempRoot = os.tmpdir() } = {}) {
   };
   try {
     fs.writeFileSync(path.join(base, META), JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
-    const stats = copyTree(root, sandboxRoot);
-    return { base, root: sandboxRoot, ...stats, estimatedBytes: estimate.bytes, availableBytes: available, cleanup };
+    const copyStarted = Date.now();
+    const stats = copyTree(root, sandboxRoot, { copyFile });
+    return {
+      base,
+      root: sandboxRoot,
+      ...stats,
+      estimatedFiles: estimate.files,
+      estimatedBytes: estimate.bytes,
+      excludedPaths: estimate.excludedPaths,
+      availableBytes: available,
+      requiredBytes: required,
+      scanMs,
+      copyMs: Date.now() - copyStarted,
+      cleanup,
+    };
   } catch (err) {
-    cleanup();
+    err.details ??= {
+      ...estimate,
+      scanMs,
+      availableBytes: available,
+      requiredBytes: required,
+    };
+    try {
+      cleanup();
+    } catch {}
     throw err;
   }
 }

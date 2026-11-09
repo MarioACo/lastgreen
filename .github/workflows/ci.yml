@@ -20,3 +20,16 @@ jobs:
           node-version: ${{ matrix.node }}
       # Node 16 has the test runner but not --test-reporter.
       - run: node --test ${{ matrix.node >= 18 && '--test-reporter=spec' || '' }}
+
+  sandbox-benchmark:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/bench-sandbox.mjs --files 10000 --file-bytes 512

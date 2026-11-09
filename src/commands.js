@@ -339,11 +339,13 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
 
   printDiff(say, diff, green);
   let sandboxUsed = false;
+  let isolation = { mode: opts.noSandbox ? 'off' : opts.sandbox ? 'required' : 'auto', used: false };
   const summary = (extra) => ({
     version: VERSION,
     lastGreen: green.gitBaseline ? null : green.at,
     ...(green.gitBaseline ? { baseline: { type: 'git', ref: green.gitBaseline.ref, commit: green.gitBaseline.commit } } : {}),
     sandbox: sandboxUsed,
+    isolation,
     changes: diff.factors.map((f) => ({ kind: f.kind, name: f.name, change: f.change, from: f.from, to: f.to, testable: f.testable, reason: f.reason })),
     ...extra,
   });
@@ -455,11 +457,13 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
       say('');
       say(c.yellow(`${sym.warn} ${t('sandboxSkippedCwd')}`));
       sandboxMode = 'off';
+      isolation = { ...isolation, used: false, fallback: { code: 'CWD_OUTSIDE_PROJECT', message: t('sandboxCwd') } };
     }
   }
   if (sandboxMode !== 'off') {
     say('');
     const stale = cleanupStaleSandboxes();
+    isolation = { ...isolation, abandonedRemoved: stale };
     if (stale) say(c.dim(t('sandboxCleaned', stale)));
     say(c.dim(t('sandboxCopying')));
     const copiedAt = Date.now();
@@ -467,11 +471,29 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
       sandbox = createSandbox(root);
     } catch (err) {
       if (sandboxMode === 'required') throw new UserError(t('sandboxFailed', err.message));
+      isolation = {
+        ...isolation,
+        used: false,
+        fallback: { code: err.code ?? 'COPY_FAILED', message: err.message },
+        ...(err.details ?? {}),
+      };
       say(c.yellow(`${sym.warn} ${t('sandboxFallback', err.message)}`));
     }
     if (sandbox) {
       sandboxUsed = true;
-      say(c.dim(t('sandboxReady', sandbox.files, sandbox.bytes, Date.now() - copiedAt)));
+      isolation = {
+        ...isolation,
+        used: true,
+        files: sandbox.files,
+        bytes: sandbox.bytes,
+        excludedPaths: sandbox.excludedPaths,
+        strategy: sandbox.strategy,
+        scanMs: sandbox.scanMs,
+        copyMs: sandbox.copyMs,
+        availableBytes: sandbox.availableBytes,
+        requiredBytes: sandbox.requiredBytes,
+      };
+      say(c.dim(t('sandboxReady', sandbox.files, sandbox.bytes, Date.now() - copiedAt, sandbox.strategy, sandbox.excludedPaths)));
     }
   }
   const executionRoot = sandbox?.root ?? root;

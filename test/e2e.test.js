@@ -107,6 +107,11 @@ test('automatic sandbox isolates the original project and --no-sandbox is an exp
   assert.equal(out.status, 'found', r.stderr);
   assert.equal(out.confirmed, true, r.stderr);
   assert.equal(out.sandbox, true);
+  assert.equal(out.isolation.mode, 'auto');
+  assert.equal(out.isolation.used, true);
+  assert.ok(out.isolation.files > 0);
+  assert.ok(out.isolation.requiredBytes > out.isolation.bytes);
+  assert.match(out.isolation.strategy, /^(copy|copy-on-write|mixed)$/);
   assert.deepEqual(out.culprit.map((f) => f.name), ['alpha']);
   assert.equal(fs.existsSync(marker), false, 'the test command ran in the original project');
   assertTree(root, redTree, ['node_modules/gone']);
@@ -115,6 +120,7 @@ test('automatic sandbox isolates the original project and --no-sandbox is an exp
   r = cli(root, ['why', '--no-sandbox', '--json', '--offline']);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(JSON.parse(r.stdout).sandbox, false);
+  assert.deepEqual(JSON.parse(r.stdout).isolation, { mode: 'off', used: false });
   assert.equal(fs.existsSync(marker), true, '--no-sandbox did not run in the original project');
   fs.rmSync(marker);
 });

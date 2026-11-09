@@ -6,6 +6,9 @@
   free disk space, skips disposable caches, uses copy-on-write when available,
   and removes abandoned sandboxes. `--sandbox` requires isolation and
   `--no-sandbox` is the explicit escape hatch.
+- JSON results now expose sandbox metrics and exact fallback details. A
+  synthetic monorepo benchmark validates copying and cleanup on all three CI
+  operating systems; low-disk and failed-copy paths are covered directly.
 - `lastgreen why --from-git [ref]` can reconstruct an npm baseline from a
   package-lock or shrinkwrap in Git when no green run was saved. It supports npm
   lockfiles v1-v3 and automatically chooses `HEAD` for uncommitted lockfile
