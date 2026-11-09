@@ -148,7 +148,7 @@ test('pnpm: a hard crash mid-bisect is repaired by the next command', async () =
   assert.equal(cli(root, ['run', '--', 'node', 'test.js']).code, 0);
   await installPnpm(root, red);
   const before = graph(root);
-  const crashed = cli(root, ['why'], { LASTGREEN_DEBUG_CRASH_AFTER: '2' });
+  const crashed = cli(root, ['why', '--no-sandbox'], { LASTGREEN_DEBUG_CRASH_AFTER: '2' });
   assert.notEqual(crashed.code, 0);
   assert.ok(fs.existsSync(path.join(root, '.lastgreen', 'journal.json')));
   assert.notEqual(graph(root), before, 'mid-bisect the links point to old versions');

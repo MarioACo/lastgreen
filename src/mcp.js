@@ -39,14 +39,15 @@ export const TOOLS = [
     name: 'lastgreen_why',
     title: 'Find and confirm the culprit',
     description:
-      'Find which environment change broke the tests and confirm it: re-runs the test command with parts of the last green environment put back (delta debugging). node_modules is changed temporarily and always restored. Returns the culprit, how it was confirmed and the exact fix command. Prefer this over guessing from error messages when tests passed before and the code did not change.',
+      'Find which environment change broke the tests and confirm it: re-runs the test command in an isolated temporary copy with parts of the last green environment put back (delta debugging). Returns the culprit, how it was confirmed and the exact fix command. Prefer this over guessing from error messages when tests passed before and the code did not change.',
     inputSchema: {
       type: 'object',
       properties: {
         cwd: cwdProp,
         command: { type: 'string', description: 'Command to re-run. Defaults to the one from the last green run.' },
         maxRuns: { type: 'number', description: 'Give up after this many runs (default 60).' },
-        sandbox: { type: 'boolean', description: 'Run in an isolated temporary copy so the original node_modules is never changed.' },
+        sandbox: { type: 'boolean', description: 'Require an isolated temporary copy (isolation is already automatic by default).' },
+        noSandbox: { type: 'boolean', description: 'Disable automatic isolation and temporarily modify the original node_modules.' },
         rebuild: { type: 'boolean', description: 'Run install scripts of restored packages (native addons).' },
         repeat: { type: 'number', description: 'Run each configuration this many times (use 3 for flaky test suites).' },
       },
@@ -89,6 +90,7 @@ export async function callTool(name, args = {}, baseCwd = process.cwd()) {
     if (args.command) cliArgs.push('--command', String(args.command));
     if (args.maxRuns) cliArgs.push('--max-runs', String(args.maxRuns));
     if (args.sandbox) cliArgs.push('--sandbox');
+    if (args.noSandbox) cliArgs.push('--no-sandbox');
     if (args.rebuild) cliArgs.push('--rebuild');
     if (args.repeat) cliArgs.push('--repeat', String(args.repeat));
     const r = await runCli(cliArgs, cwd);

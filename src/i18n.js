@@ -59,9 +59,13 @@ const en = {
   bisecting: (n, cmd) => `Finding the culprit among ${n} change${n === 1 ? '' : 's'} with \`${cmd}\``,
   safety: 'node_modules is changed temporarily and restored at the end, even on Ctrl+C or a crash.',
   safetySandbox: 'The bisect runs in an isolated temporary copy; the original project and node_modules are not changed.',
-  sandboxCopying: 'Creating an isolated copy of the project (including node_modules)...',
+  sandboxCopying: 'Preparing an isolated copy of the project (including node_modules)...',
   sandboxReady: (files, bytes, ms) => `Sandbox ready: ${files} files, ${(bytes / 1024 / 1024).toFixed(1)} MB copied in ${(ms / 1000).toFixed(1)} s.`,
   sandboxFailed: (message) => `Could not create the isolated copy: ${message}`,
+  sandboxFallback: (message) => `Automatic isolation is unavailable (${message}). Continuing in the original tree; use --sandbox to require isolation.`,
+  sandboxCleaned: (n) => `Removed ${n} abandoned sandbox${n === 1 ? '' : 'es'}.`,
+  sandboxConflict: 'Use either --sandbox or --no-sandbox, not both.',
+  sandboxSkippedCwd: 'The saved test working directory is outside the project, so automatic isolation was disabled.',
   sandboxCwd: 'The saved test working directory is outside the project, so it cannot run in the sandbox.',
   interrupted: 'lastgreen: interrupted, node_modules restored.',
   pass: 'pass',
@@ -189,7 +193,8 @@ Options for why/diff
   --max-runs <n>        give up after n runs (default 60)
   --timeout <seconds>   per run (default: 5x the green run, at least 120)
   --offline             do not download old packages or Node versions
-  --sandbox             run the bisect in an isolated temporary copy
+  --sandbox             require the automatic isolated temporary copy
+  --no-sandbox          modify and restore the original node_modules instead
   --rebuild             run install scripts (native addons) of restored packages
   --repeat <n>          run each configuration n times; disagreeing runs count as flaky
   --node <version>      compare with another Node.js version (18, lts/hydrogen, ^20), no green run needed
@@ -258,9 +263,13 @@ const es = {
   bisecting: (n, cmd) => `Buscando al culpable entre ${n} cambio${n === 1 ? '' : 's'} con \`${cmd}\``,
   safety: 'node_modules se modifica temporalmente y se restaura al final, incluso con Ctrl+C o si algo se cae.',
   safetySandbox: 'La búsqueda corre en una copia temporal aislada; el proyecto y node_modules originales no se modifican.',
-  sandboxCopying: 'Creando una copia aislada del proyecto (incluido node_modules)...',
+  sandboxCopying: 'Preparando una copia aislada del proyecto (incluido node_modules)...',
   sandboxReady: (files, bytes, ms) => `Sandbox listo: ${files} archivos, ${(bytes / 1024 / 1024).toFixed(1)} MB copiados en ${(ms / 1000).toFixed(1)} s.`,
   sandboxFailed: (message) => `No pude crear la copia aislada: ${message}`,
+  sandboxFallback: (message) => `El aislamiento automático no está disponible (${message}). Continúo en el árbol original; usa --sandbox para exigir aislamiento.`,
+  sandboxCleaned: (n) => `Eliminé ${n} sandbox abandonado${n === 1 ? '' : 's'}.`,
+  sandboxConflict: 'Usa --sandbox o --no-sandbox, no ambos.',
+  sandboxSkippedCwd: 'La carpeta de trabajo guardada está fuera del proyecto; desactivé el aislamiento automático.',
   sandboxCwd: 'La carpeta de trabajo guardada está fuera del proyecto y no puede ejecutarse en el sandbox.',
   interrupted: 'lastgreen: interrumpido, node_modules restaurado.',
   pass: 'pasa',
@@ -388,7 +397,8 @@ Opciones de why/diff
   --max-runs <n>        rendirse tras n ejecuciones (60 por defecto)
   --timeout <segundos>  por ejecución (por defecto: 5x el verde, mínimo 120)
   --offline             no descargar paquetes ni versiones de Node
-  --sandbox             ejecutar la búsqueda en una copia temporal aislada
+  --sandbox             exigir la copia temporal aislada automática
+  --no-sandbox          modificar y restaurar el node_modules original
   --rebuild             ejecutar scripts de instalación (módulos nativos) de lo restaurado
   --repeat <n>          correr cada configuración n veces; si no coinciden, cuenta como inestable
   --node <versión>      comparar con otra versión de Node.js (18, lts/hydrogen, ^20), sin verde previo

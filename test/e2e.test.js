@@ -91,7 +91,7 @@ test('finds the package that broke the tests, among many changes, and restores n
   assert.match(r.stderr, /Culprit confirmed/);
 });
 
-test('--sandbox finds the culprit without running tests or swapping packages in the original project', async () => {
+test('automatic sandbox isolates the original project and --no-sandbox is an explicit escape', async () => {
   const { root, redTree } = await fixture();
   assert.equal(cli(root, ['run', '--', 'node', 'test.js']).code, 0);
   await install(root, redTree);
@@ -101,7 +101,7 @@ test('--sandbox finds the culprit without running tests or swapping packages in 
     `require('fs').writeFileSync(__dirname + '/node_modules/sandbox-ran', 'yes');\n${TEST_FILE}`,
   );
 
-  const r = cli(root, ['why', '--sandbox', '--json', '--offline']);
+  let r = cli(root, ['why', '--json', '--offline']);
   assert.equal(r.code, 0, r.stderr);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'found', r.stderr);
@@ -111,6 +111,12 @@ test('--sandbox finds the culprit without running tests or swapping packages in 
   assert.equal(fs.existsSync(marker), false, 'the test command ran in the original project');
   assertTree(root, redTree, ['node_modules/gone']);
   assert.match(r.stderr, /isolated copy/);
+
+  r = cli(root, ['why', '--no-sandbox', '--json', '--offline']);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).sandbox, false);
+  assert.equal(fs.existsSync(marker), true, '--no-sandbox did not run in the original project');
+  fs.rmSync(marker);
 });
 
 test('finds an environment variable culprit', async () => {
@@ -139,7 +145,7 @@ test('a hard crash in the middle of a bisect is repaired by the next command', a
   const { root, redTree } = await fixture();
   assert.equal(cli(root, ['run', '--', 'node', 'test.js']).code, 0);
   await install(root, redTree);
-  const crashed = cli(root, ['why'], { LASTGREEN_DEBUG_CRASH_AFTER: '2' });
+  const crashed = cli(root, ['why', '--no-sandbox'], { LASTGREEN_DEBUG_CRASH_AFTER: '2' });
   assert.notEqual(crashed.code, 0);
   assert.ok(fs.existsSync(path.join(root, '.lastgreen', 'journal.json')), 'journal must survive the crash');
   // node_modules is in the "old" state right now
@@ -226,7 +232,7 @@ test('Ctrl+C in the middle of a bisect restores node_modules', { skip: process.p
   fs.writeFileSync(path.join(root, 'slow.flag'), '');
   const env = { ...process.env, NO_COLOR: '1', LASTGREEN_LANG: 'en', LASTGREEN_CACHE_DIR: path.join(root, '..', 'lg-cache') };
   delete env.NODE_TEST_CONTEXT;
-  const child = spawn(process.execPath, [BIN, 'why'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [BIN, 'why', '--no-sandbox'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   child.stdout.on('data', (c) => (out += c));
   child.stderr.on('data', (c) => (out += c));

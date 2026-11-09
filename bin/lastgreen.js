@@ -13,7 +13,7 @@ if (major < 16) {
 const VALUE_FLAGS = { '-c': 'command', '--command': 'command', '--against': 'against', '--max-runs': 'maxRuns',
   '--timeout': 'timeout', '--repeat': 'repeat', '--node': 'node', '-o': 'out', '--out': 'out', '-n': 'n', '--lang': 'lang' };
 const BOOL_FLAGS = { '--dry-run': 'dryRun', '--offline': 'offline', '--rebuild': 'rebuild', '--json': 'json', '--show-output': 'showOutput',
-  '--sandbox': 'sandbox', '--now': 'now', '--ci': 'ci', '--no-install': 'noInstall', '--no-color': 'noColor', '-h': 'help', '--help': 'help', '-v': 'version', '--version': 'version' };
+  '--sandbox': 'sandbox', '--no-sandbox': 'noSandbox', '--now': 'now', '--ci': 'ci', '--no-install': 'noInstall', '--no-color': 'noColor', '-h': 'help', '--help': 'help', '-v': 'version', '--version': 'version' };
 const NUMERIC = new Set(['maxRuns', 'timeout', 'n', 'repeat']);
 
 function parse(argv) {

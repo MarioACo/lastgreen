@@ -16,7 +16,7 @@ import { prependPath } from './env.js';
 import { detectManager } from './packages.js';
 import { Workspace } from './workspace.js';
 import { PnpmWorkspace } from './pnpm.js';
-import { createSandbox } from './sandbox.js';
+import { cleanupStaleSandboxes, createSandbox } from './sandbox.js';
 
 class UserError extends Error {}
 
@@ -291,6 +291,7 @@ function lastLines(text, count = 4, root = null) {
 }
 
 export async function cmdWhy(opts, { dryRun = false } = {}) {
+  if (opts.sandbox && opts.noSandbox) throw new UserError(t('sandboxConflict'));
   const json = Boolean(opts.json);
   const say = createWriter(json ? process.stderr : process.stdout);
   configureFor(json ? process.stderr : process.stdout);
@@ -337,11 +338,12 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   if (diff.code?.headChanged) diff.code.commits = await countCommits(root, green.git?.head, current.git?.head);
 
   printDiff(say, diff, green);
+  let sandboxUsed = false;
   const summary = (extra) => ({
     version: VERSION,
     lastGreen: green.gitBaseline ? null : green.at,
     ...(green.gitBaseline ? { baseline: { type: 'git', ref: green.gitBaseline.ref, commit: green.gitBaseline.commit } } : {}),
-    sandbox: Boolean(opts.sandbox),
+    sandbox: sandboxUsed,
     changes: diff.factors.map((f) => ({ kind: f.kind, name: f.name, change: f.change, from: f.from, to: f.to, testable: f.testable, reason: f.reason })),
     ...extra,
   });
@@ -445,24 +447,35 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   }
 
   let sandbox = null;
-  if (opts.sandbox) {
+  let sandboxMode = opts.noSandbox ? 'off' : opts.sandbox ? 'required' : 'auto';
+  const relativeCwd = path.relative(root, cwd);
+  if (relativeCwd.startsWith('..') || path.isAbsolute(relativeCwd)) {
+    if (sandboxMode === 'required') throw new UserError(t('sandboxCwd'));
+    if (sandboxMode === 'auto') {
+      say('');
+      say(c.yellow(`${sym.warn} ${t('sandboxSkippedCwd')}`));
+      sandboxMode = 'off';
+    }
+  }
+  if (sandboxMode !== 'off') {
     say('');
+    const stale = cleanupStaleSandboxes();
+    if (stale) say(c.dim(t('sandboxCleaned', stale)));
     say(c.dim(t('sandboxCopying')));
     const copiedAt = Date.now();
     try {
       sandbox = createSandbox(root);
     } catch (err) {
-      throw new UserError(t('sandboxFailed', err.message));
+      if (sandboxMode === 'required') throw new UserError(t('sandboxFailed', err.message));
+      say(c.yellow(`${sym.warn} ${t('sandboxFallback', err.message)}`));
     }
-    say(c.dim(t('sandboxReady', sandbox.files, sandbox.bytes, Date.now() - copiedAt)));
+    if (sandbox) {
+      sandboxUsed = true;
+      say(c.dim(t('sandboxReady', sandbox.files, sandbox.bytes, Date.now() - copiedAt)));
+    }
   }
   const executionRoot = sandbox?.root ?? root;
-  const relativeCwd = path.relative(root, cwd);
-  if (relativeCwd.startsWith('..') || path.isAbsolute(relativeCwd)) {
-    sandbox?.cleanup();
-    throw new UserError(t('sandboxCwd'));
-  }
-  const executionCwd = path.join(executionRoot, relativeCwd);
+  const executionCwd = sandbox ? path.join(executionRoot, relativeCwd) : cwd;
   const journal = sandbox ? path.join(executionRoot, '.lastgreen', 'journal.json') : store.journal;
   const ws = pnpmMode
     ? new PnpmWorkspace(executionRoot, journal)

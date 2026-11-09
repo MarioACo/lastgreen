@@ -6,7 +6,7 @@ import { captureEnv, isNoise, prependPath, setEnv } from '../src/env.js';
 import { computeDiff, mentionedPackages, versionLevel } from '../src/diff.js';
 import { packagesFromNpmLock, pnpmName, readInstalled } from '../src/packages.js';
 import { shellJoin } from '../src/exec.js';
-import { createSandbox } from '../src/sandbox.js';
+import { cleanupStaleSandboxes, createSandbox } from '../src/sandbox.js';
 import { install, packageTarball, tmpDir, writeProject } from './helpers.js';
 
 test('env: noise is ignored, secrets are hash-only, behavioural values are kept', () => {
@@ -174,20 +174,37 @@ test('shellJoin quotes for cmd.exe and sh', () => {
 });
 
 test('sandbox copies the project, excludes lastgreen state and cleans up idempotently', () => {
-  const root = path.join(tmpDir(), 'project');
+  const tempRoot = tmpDir();
+  const root = path.join(tempRoot, 'project');
   fs.mkdirSync(path.join(root, 'node_modules', 'a'), { recursive: true });
   fs.mkdirSync(path.join(root, '.lastgreen'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'node_modules', '.cache'), { recursive: true });
   fs.writeFileSync(path.join(root, 'source.js'), 'source');
   fs.writeFileSync(path.join(root, 'node_modules', 'a', 'index.js'), 'package');
+  fs.writeFileSync(path.join(root, 'node_modules', '.cache', 'artifact'), 'cache');
   fs.writeFileSync(path.join(root, '.lastgreen', 'snapshot.json'), 'private state');
-  const sandbox = createSandbox(root);
+  const sandbox = createSandbox(root, { tempRoot });
   assert.equal(fs.readFileSync(path.join(sandbox.root, 'source.js'), 'utf8'), 'source');
   assert.equal(fs.readFileSync(path.join(sandbox.root, 'node_modules', 'a', 'index.js'), 'utf8'), 'package');
   assert.equal(fs.existsSync(path.join(sandbox.root, '.lastgreen')), false);
+  assert.equal(fs.existsSync(path.join(sandbox.root, 'node_modules', '.cache')), false);
   assert.equal(fs.existsSync(sandbox.base), true);
   sandbox.cleanup();
   sandbox.cleanup();
   assert.equal(fs.existsSync(sandbox.base), false);
+});
+
+test('sandbox cleanup removes dead owners but not a live process', () => {
+  const tempRoot = tmpDir();
+  const dead = path.join(tempRoot, 'lastgreen-sandbox-dead');
+  const live = path.join(tempRoot, 'lastgreen-sandbox-live');
+  fs.mkdirSync(dead);
+  fs.mkdirSync(live);
+  fs.writeFileSync(path.join(dead, '.lastgreen-sandbox.json'), JSON.stringify({ pid: 2147483647 }));
+  fs.writeFileSync(path.join(live, '.lastgreen-sandbox.json'), JSON.stringify({ pid: process.pid }));
+  assert.equal(cleanupStaleSandboxes({ tempRoot }), 1);
+  assert.equal(fs.existsSync(dead), false);
+  assert.equal(fs.existsSync(live), true);
 });
 
 test('semver ranges the way npm reads them', async () => {

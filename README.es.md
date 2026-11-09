@@ -203,9 +203,11 @@ args = ["-y", "lastgreen", "mcp"]
 - **La configuración es transaccional.** Si el gestor de paquetes falla durante
   `lastgreen init`, `package.json` y los lockfiles se restauran byte por byte y
   no queda un workflow de CI incompleto.
-- **Aislamiento opcional.** `lastgreen why --sandbox` copia el proyecto y
-  `node_modules` a una carpeta temporal, ejecuta allí toda la búsqueda y elimina
-  la copia al terminar. El árbol original nunca se modifica.
+- **Aislamiento automático.** `lastgreen why` mide el proyecto y el espacio
+  libre, lo copia junto con `node_modules` a una carpeta temporal y ejecuta allí
+  toda la búsqueda. Omite cachés desechables y elimina copias abandonadas en la
+  siguiente ejecución. Usa `--sandbox` para exigir aislamiento o `--no-sandbox`
+  para usar explícitamente el árbol original con restauración mediante journal.
 - **Tu código nunca se toca.**
 - **`node_modules` siempre se restaura.** Cada cambio se anota en
   `.lastgreen/journal.json` *antes* de hacerlo. Si pulsas Ctrl+C, el proceso se
@@ -274,7 +276,8 @@ lastgreen mcp                  servidor MCP para agentes de IA
   --max-runs <n>        rendirse tras n ejecuciones (60 por defecto)
   --timeout <segundos>  por ejecución (por defecto: 5x el verde, mínimo 120)
   --offline             nunca descargar paquetes ni versiones de Node
-  --sandbox             correr en una copia temporal; no tocar node_modules original
+  --sandbox             exigir la copia temporal automática
+  --no-sandbox          modificar y restaurar el node_modules original
   --rebuild             correr scripts de instalación (módulos nativos) de lo devuelto
   --repeat <n>          correr cada configuración n veces; si no coinciden, es inestable
   --node <versión>      comparar con otra versión de Node.js (18, lts/hydrogen, ^20)
