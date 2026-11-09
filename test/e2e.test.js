@@ -91,6 +91,28 @@ test('finds the package that broke the tests, among many changes, and restores n
   assert.match(r.stderr, /Culprit confirmed/);
 });
 
+test('--sandbox finds the culprit without running tests or swapping packages in the original project', async () => {
+  const { root, redTree } = await fixture();
+  assert.equal(cli(root, ['run', '--', 'node', 'test.js']).code, 0);
+  await install(root, redTree);
+  const marker = path.join(root, 'node_modules', 'sandbox-ran');
+  fs.writeFileSync(
+    path.join(root, 'test.js'),
+    `require('fs').writeFileSync(__dirname + '/node_modules/sandbox-ran', 'yes');\n${TEST_FILE}`,
+  );
+
+  const r = cli(root, ['why', '--sandbox', '--json', '--offline']);
+  assert.equal(r.code, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'found', r.stderr);
+  assert.equal(out.confirmed, true, r.stderr);
+  assert.equal(out.sandbox, true);
+  assert.deepEqual(out.culprit.map((f) => f.name), ['alpha']);
+  assert.equal(fs.existsSync(marker), false, 'the test command ran in the original project');
+  assertTree(root, redTree, ['node_modules/gone']);
+  assert.match(r.stderr, /isolated copy/);
+});
+
 test('finds an environment variable culprit', async () => {
   const { root } = await fixture();
   assert.equal(cli(root, ['run', 'node', 'test.js']).code, 0);

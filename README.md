@@ -196,6 +196,12 @@ args = ["-y", "lastgreen", "mcp"]
 
 ## Safety
 
+- **Setup is transactional.** If the package manager fails during `lastgreen
+  init`, `package.json` and the lockfiles are restored byte-for-byte and no CI
+  workflow is left behind.
+- **Isolation is available.** `lastgreen why --sandbox` copies the project and
+  `node_modules` to a temporary folder, runs the complete search there, and
+  removes the copy when it finishes. The original tree is never mutated.
 - **Your code is never touched.**
 - **`node_modules` is restored, always.** Every change is written to
   `.lastgreen/journal.json` *before* it happens. Ctrl+C, a crash or a power cut
@@ -262,6 +268,7 @@ lastgreen mcp                  MCP server for AI agents
   --max-runs <n>        give up after n runs (default 60)
   --timeout <seconds>   per run (default: 5x the green run, at least 120)
   --offline             never download packages or Node versions
+  --sandbox             run in a temporary copy; never touch the original node_modules
   --rebuild             run install scripts (native addons) of restored packages
   --repeat <n>          run each configuration n times; disagreeing runs are flaky
   --node <version>      compare with another Node.js version (18, lts/hydrogen, ^20)

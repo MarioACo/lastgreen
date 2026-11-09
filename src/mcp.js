@@ -46,6 +46,7 @@ export const TOOLS = [
         cwd: cwdProp,
         command: { type: 'string', description: 'Command to re-run. Defaults to the one from the last green run.' },
         maxRuns: { type: 'number', description: 'Give up after this many runs (default 60).' },
+        sandbox: { type: 'boolean', description: 'Run in an isolated temporary copy so the original node_modules is never changed.' },
         rebuild: { type: 'boolean', description: 'Run install scripts of restored packages (native addons).' },
         repeat: { type: 'number', description: 'Run each configuration this many times (use 3 for flaky test suites).' },
       },
@@ -87,6 +88,7 @@ export async function callTool(name, args = {}, baseCwd = process.cwd()) {
     if (args.against) cliArgs.push('--against', String(args.against));
     if (args.command) cliArgs.push('--command', String(args.command));
     if (args.maxRuns) cliArgs.push('--max-runs', String(args.maxRuns));
+    if (args.sandbox) cliArgs.push('--sandbox');
     if (args.rebuild) cliArgs.push('--rebuild');
     if (args.repeat) cliArgs.push('--repeat', String(args.repeat));
     const r = await runCli(cliArgs, cwd);

@@ -94,6 +94,25 @@ export async function cmdInit(opts, UserError) {
   if (!root) throw new UserError(t('noProject'));
   const file = path.join(root, 'package.json');
   const text = fs.readFileSync(file, 'utf8');
+  const configFiles = [
+    file,
+    ...['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb'].map((name) => path.join(root, name)),
+  ];
+  const before = new Map(
+    configFiles.map((name) => {
+      try {
+        return [name, fs.readFileSync(name)];
+      } catch {
+        return [name, null];
+      }
+    }),
+  );
+  const rollbackConfig = () => {
+    for (const [name, contents] of before) {
+      if (contents == null) fs.rmSync(name, { force: true });
+      else fs.writeFileSync(name, contents);
+    }
+  };
   const indent = /^([ \t]+)"/m.exec(text)?.[1] ?? '  ';
   const pkg = JSON.parse(text);
   const manager = detectManager(root, pkg) ?? 'npm';
@@ -139,7 +158,10 @@ export async function cmdInit(opts, UserError) {
     say(c.dim(`  ${t('initInstalling', install)}`));
     const r = await runCommand(install, { cwd: root, timeoutMs: 180_000 });
     if (r.code === 0) say(`  ${c.green(sym.ok)} ${t('initInstalled')}`);
-    else say(c.yellow(`  ${sym.warn} ${t('initInstallFailed')} ${install}`));
+    else {
+      rollbackConfig();
+      throw new UserError(`${t('initInstallRolledBack')}\n${t('initInstallRetry')} ${install}${r.error ? `\n${r.error}` : ''}`);
+    }
   }
 
   // 3. CI.

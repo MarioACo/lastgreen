@@ -94,6 +94,26 @@ test('pnpm: finds the culprit by re-pointing links and leaves everything exactly
   assert.equal(fs.existsSync(path.join(root, '.lastgreen', 'journal.json')), false);
 });
 
+test('pnpm: --sandbox retargets copied links and never touches the original graph', async () => {
+  const { root, red } = await pnpmFixture();
+  assert.equal(cli(root, ['run', '--', 'node', 'test.js']).code, 0);
+  await installPnpm(root, red);
+  const before = graph(root);
+  const marker = path.join(root, 'node_modules', 'sandbox-ran');
+  const testFile = path.join(root, 'test.js');
+  fs.writeFileSync(testFile, `require('fs').writeFileSync(__dirname + '/node_modules/sandbox-ran', 'yes');\n${fs.readFileSync(testFile, 'utf8')}`);
+
+  const r = cli(root, ['why', '--sandbox', '--json', '--offline']);
+  assert.equal(r.code, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'found', r.stderr);
+  assert.equal(out.sandbox, true);
+  assert.deepEqual(out.culprit.map((f) => f.name), ['alpha']);
+  assert.equal(fs.existsSync(marker), false);
+  assert.equal(graph(root), before, 'the original pnpm links changed');
+  assert.equal(fs.existsSync(path.join(root, 'node_modules', '.pnpm', 'alpha@1.0.0')), false);
+});
+
 test('pnpm: an old version comes back with the dependencies pnpm already deleted', async () => {
   const dir = tmpDir();
   const root = path.join(dir, 'proj');

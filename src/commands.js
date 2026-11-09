@@ -16,6 +16,7 @@ import { prependPath } from './env.js';
 import { detectManager } from './packages.js';
 import { Workspace } from './workspace.js';
 import { PnpmWorkspace } from './pnpm.js';
+import { createSandbox } from './sandbox.js';
 
 class UserError extends Error {}
 
@@ -340,6 +341,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     version: VERSION,
     lastGreen: green.gitBaseline ? null : green.at,
     ...(green.gitBaseline ? { baseline: { type: 'git', ref: green.gitBaseline.ref, commit: green.gitBaseline.commit } } : {}),
+    sandbox: Boolean(opts.sandbox),
     changes: diff.factors.map((f) => ({ kind: f.kind, name: f.name, change: f.change, from: f.from, to: f.to, testable: f.testable, reason: f.reason })),
     ...extra,
   });
@@ -360,15 +362,10 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   const command = opts.command ?? green.command ?? config.command;
   if (!command) throw new UserError(t('noCommandWhy'));
   const cwd = !green.exported && green.cwd != null ? path.join(root, ...green.cwd.split('/').filter(Boolean)) : process.cwd();
-  // Like `npm run`: local binaries (vitest, jest, tsc...) resolve without npx.
-  const runEnv = { ...process.env, LASTGREEN_BISECT: '1' };
-  prependPath(runEnv, path.join(root, 'node_modules', '.bin'));
-  if (cwd !== root) prependPath(runEnv, path.join(cwd, 'node_modules', '.bin'));
   const cache = cacheDir();
   const pnpmMode = green.layout === 'pnpm' && current.layout === 'pnpm';
-  const ws = pnpmMode
-    ? new PnpmWorkspace(root, store.journal)
-    : new Workspace(root, store.journal, { rebuild: Boolean(opts.rebuild), nodePath: current.node?.path });
+  const preparedTarballs = new Map();
+  let preparedNodeDir = null;
 
   // Prepare: old package versions and the old Node binary.
   const needs = [];
@@ -390,7 +387,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     const got = await ensureTarballs(needs, { root, cacheDir: cache, nodePath: current.node?.path, offline: opts.offline });
     for (const need of needs) {
       const r = got.get(need.id);
-      if (r?.file) ws.setTarball(need.key, r.file);
+      if (r?.file) preparedTarballs.set(need.key, r.file);
       else if (need.factor.testable) [need.factor.testable, need.factor.reason] = [false, `fetch:${r?.error ?? 'unknown'}`];
     }
   }
@@ -399,7 +396,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     const can = (dir, seen = new Set()) => {
       if (current.packages[`pnpm:${dir}`] || seen.has(dir)) return true;
       seen.add(dir);
-      if (!ws.tarballs.has(dir)) return false;
+      if (!preparedTarballs.has(dir)) return false;
       return Object.values(green.packages[`pnpm:${dir}`]?.links ?? {}).every((t2) => can(t2, seen));
     };
     for (const f of diff.factors.filter((x) => x.pnpm && x.testable)) {
@@ -423,7 +420,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
       const env = { ...process.env };
       prependPath(env, dir);
       const probe = await probeNode(env, cwd);
-      if (probe?.version === nodeFactor.from) ws.nodeDir = dir;
+      if (probe?.version === nodeFactor.from) preparedNodeDir = dir;
       else [nodeFactor.testable, nodeFactor.reason] = [false, 'node-mismatch'];
     }
   }
@@ -447,10 +444,40 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     return;
   }
 
+  let sandbox = null;
+  if (opts.sandbox) {
+    say('');
+    say(c.dim(t('sandboxCopying')));
+    const copiedAt = Date.now();
+    try {
+      sandbox = createSandbox(root);
+    } catch (err) {
+      throw new UserError(t('sandboxFailed', err.message));
+    }
+    say(c.dim(t('sandboxReady', sandbox.files, sandbox.bytes, Date.now() - copiedAt)));
+  }
+  const executionRoot = sandbox?.root ?? root;
+  const relativeCwd = path.relative(root, cwd);
+  if (relativeCwd.startsWith('..') || path.isAbsolute(relativeCwd)) {
+    sandbox?.cleanup();
+    throw new UserError(t('sandboxCwd'));
+  }
+  const executionCwd = path.join(executionRoot, relativeCwd);
+  const journal = sandbox ? path.join(executionRoot, '.lastgreen', 'journal.json') : store.journal;
+  const ws = pnpmMode
+    ? new PnpmWorkspace(executionRoot, journal)
+    : new Workspace(executionRoot, journal, { rebuild: Boolean(opts.rebuild), nodePath: current.node?.path });
+  for (const [key, file] of preparedTarballs) ws.setTarball(key, file);
+  ws.nodeDir = preparedNodeDir;
+  // Like `npm run`: local binaries (vitest, jest, tsc...) resolve without npx.
+  const runEnv = { ...process.env, LASTGREEN_BISECT: '1' };
+  prependPath(runEnv, path.join(executionRoot, 'node_modules', '.bin'));
+  if (executionCwd !== executionRoot) prependPath(runEnv, path.join(executionCwd, 'node_modules', '.bin'));
+
   const timeoutMs = ((opts.timeout ?? config.timeout) || 0) * 1000 || Math.max(120_000, (green.durationMs ?? 0) * 5);
   say('');
   say(c.bold(t('bisecting', testable.length, command)));
-  say(c.dim(t('safety')));
+  say(c.dim(t(sandbox ? 'safetySandbox' : 'safety')));
 
   let child = null;
   const restoreNow = () => {
@@ -458,9 +485,15 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
       ws.restore();
     } catch {}
   };
+  const cleanupSandbox = () => {
+    try {
+      sandbox?.cleanup();
+    } catch {}
+  };
   const onSignal = () => {
     if (child) killTree(child);
     restoreNow();
+    cleanupSandbox();
     process.stderr.write(`\n${t('interrupted')}\n`);
     process.exit(130);
   };
@@ -468,6 +501,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   const signals = ['SIGINT', 'SIGTERM', 'SIGHUP', ...(process.platform === 'win32' ? ['SIGBREAK'] : [])];
   for (const sig of signals) process.on(sig, onSignal);
   process.on('exit', restoreNow);
+  process.on('exit', cleanupSandbox);
 
   const ids = testable.map((f) => f.id);
   const normalize = (set) => couple(set, ids, coupling);
@@ -490,7 +524,7 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
         const results = [];
         let r;
         for (let i = 0; i < repeat; i++) {
-          r = await runCommand(command, { cwd, env, timeoutMs, onChild: (ch) => (child = ch) });
+          r = await runCommand(command, { cwd: executionCwd, env, timeoutMs, onChild: (ch) => (child = ch) });
           results.push(r.code === 0);
           if (results.some((x) => x !== results[0])) break;
           if (!results[0] && r.tail) outputs.set(keyOf(set), r.tail);
@@ -518,8 +552,27 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     restoreNow();
     for (const sig of signals) process.off(sig, onSignal);
     process.off('exit', restoreNow);
+    if (!result) {
+      cleanupSandbox();
+      process.off('exit', cleanupSandbox);
+    }
   }
-  const wrong = ws.verify(current);
+  let wrong;
+  try {
+    wrong = ws.verify(current);
+    if (sandbox) {
+      const variants = [executionRoot, executionRoot.replace(/\\/g, '/')];
+      const originals = [root, root.replace(/\\/g, '/')];
+      for (const [key, value] of outputs) {
+        let mapped = value;
+        for (let i = 0; i < variants.length; i++) mapped = mapped.split(variants[i]).join(originals[i]);
+        outputs.set(key, mapped);
+      }
+    }
+  } finally {
+    cleanupSandbox();
+    process.off('exit', cleanupSandbox);
+  }
 
   say('');
   const culprit = (result.culprit ?? []).map((id) => testable.find((f) => f.id === id));

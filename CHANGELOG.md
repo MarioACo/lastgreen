@@ -6,6 +6,11 @@
   package-lock or shrinkwrap in Git when no green run was saved. It supports npm
   lockfiles v1-v3 and automatically chooses `HEAD` for uncommitted lockfile
   changes or `HEAD^` for a committed update.
+- `lastgreen init` is transactional: if adding the devDependency fails, it
+  restores `package.json` and lockfiles and does not leave a broken CI workflow.
+- `lastgreen why --sandbox` runs the complete bisect in an isolated temporary
+  copy, including `node_modules`, and removes it afterwards. Test side effects
+  and package swaps cannot touch the original project.
 
 ## 0.3.0
 

@@ -76,3 +76,19 @@ test('init --dry-run writes nothing', () => {
   assert.equal(fs.readFileSync(path.join(root, 'package.json'), 'utf8'), before);
   assert.equal(fs.existsSync(path.join(root, '.github')), false);
 });
+
+test('init rolls package.json and lockfiles back when installation fails', () => {
+  const root = path.join(tmpDir(), 'proj');
+  writeProject(root, { test: 'node test.js', testFile: 'process.exit(0)' });
+  const lock = path.join(root, 'package-lock.json');
+  fs.writeFileSync(lock, '{"lockfileVersion":3,"packages":{}}\n');
+  const packageBefore = fs.readFileSync(path.join(root, 'package.json'));
+  const lockBefore = fs.readFileSync(lock);
+
+  const r = cli(root, ['init', '--ci'], { PATH: '', Path: '' });
+  assert.notEqual(r.code, 0);
+  assert.match(r.stderr, /package\.json and lockfiles were restored/);
+  assert.deepEqual(fs.readFileSync(path.join(root, 'package.json')), packageBefore);
+  assert.deepEqual(fs.readFileSync(lock), lockBefore);
+  assert.equal(fs.existsSync(path.join(root, '.github', 'workflows', 'lastgreen.yml')), false);
+});

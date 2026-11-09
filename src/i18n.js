@@ -12,7 +12,8 @@ const en = {
   initInstallLater: 'Add the dependency:',
   initInstalling: (cmd) => `Installing: ${cmd}`,
   initInstalled: 'Added lastgreen as a devDependency',
-  initInstallFailed: 'Could not install it; run it yourself:',
+  initInstallRolledBack: 'Could not install lastgreen. package.json and lockfiles were restored; no CI workflow was written.',
+  initInstallRetry: 'Fix the package-manager error and retry:',
   initCiNeedsCommand: 'No test command, so no CI workflow was written',
   initWorkflowExists: '.github/workflows/lastgreen.yml already exists (left as it is)',
   initWorkflow: 'GitHub Actions workflow written:',
@@ -57,6 +58,11 @@ const en = {
   otherMachineEnv: (n) => `${n} environment variable${n === 1 ? '' : 's'} differ${n === 1 ? 's' : ''} because it is another machine (not compared)`,
   bisecting: (n, cmd) => `Finding the culprit among ${n} change${n === 1 ? '' : 's'} with \`${cmd}\``,
   safety: 'node_modules is changed temporarily and restored at the end, even on Ctrl+C or a crash.',
+  safetySandbox: 'The bisect runs in an isolated temporary copy; the original project and node_modules are not changed.',
+  sandboxCopying: 'Creating an isolated copy of the project (including node_modules)...',
+  sandboxReady: (files, bytes, ms) => `Sandbox ready: ${files} files, ${(bytes / 1024 / 1024).toFixed(1)} MB copied in ${(ms / 1000).toFixed(1)} s.`,
+  sandboxFailed: (message) => `Could not create the isolated copy: ${message}`,
+  sandboxCwd: 'The saved test working directory is outside the project, so it cannot run in the sandbox.',
   interrupted: 'lastgreen: interrupted, node_modules restored.',
   pass: 'pass',
   flaky: (failed, total) => `flaky (${failed}/${total} failed)`,
@@ -183,6 +189,7 @@ Options for why/diff
   --max-runs <n>        give up after n runs (default 60)
   --timeout <seconds>   per run (default: 5x the green run, at least 120)
   --offline             do not download old packages or Node versions
+  --sandbox             run the bisect in an isolated temporary copy
   --rebuild             run install scripts (native addons) of restored packages
   --repeat <n>          run each configuration n times; disagreeing runs count as flaky
   --node <version>      compare with another Node.js version (18, lts/hydrogen, ^20), no green run needed
@@ -210,7 +217,8 @@ const es = {
   initInstallLater: 'Agrega la dependencia:',
   initInstalling: (cmd) => `Instalando: ${cmd}`,
   initInstalled: 'lastgreen quedó como devDependency',
-  initInstallFailed: 'No se pudo instalar; córrelo tú:',
+  initInstallRolledBack: 'No se pudo instalar lastgreen. Se restauraron package.json y los lockfiles; no se creó el workflow de CI.',
+  initInstallRetry: 'Corrige el error del gestor de paquetes y vuelve a intentar:',
   initCiNeedsCommand: 'No hay comando de pruebas, así que no se escribió el workflow de CI',
   initWorkflowExists: '.github/workflows/lastgreen.yml ya existe (no se tocó)',
   initWorkflow: 'Workflow de GitHub Actions creado:',
@@ -249,6 +257,11 @@ const es = {
   otherMachineEnv: (n) => `${n} variable${n === 1 ? '' : 's'} de entorno distinta${n === 1 ? '' : 's'} por ser otra máquina (no se comparan)`,
   bisecting: (n, cmd) => `Buscando al culpable entre ${n} cambio${n === 1 ? '' : 's'} con \`${cmd}\``,
   safety: 'node_modules se modifica temporalmente y se restaura al final, incluso con Ctrl+C o si algo se cae.',
+  safetySandbox: 'La búsqueda corre en una copia temporal aislada; el proyecto y node_modules originales no se modifican.',
+  sandboxCopying: 'Creando una copia aislada del proyecto (incluido node_modules)...',
+  sandboxReady: (files, bytes, ms) => `Sandbox listo: ${files} archivos, ${(bytes / 1024 / 1024).toFixed(1)} MB copiados en ${(ms / 1000).toFixed(1)} s.`,
+  sandboxFailed: (message) => `No pude crear la copia aislada: ${message}`,
+  sandboxCwd: 'La carpeta de trabajo guardada está fuera del proyecto y no puede ejecutarse en el sandbox.',
   interrupted: 'lastgreen: interrumpido, node_modules restaurado.',
   pass: 'pasa',
   flaky: (failed, total) => `inestable (${failed}/${total} fallan)`,
@@ -375,6 +388,7 @@ Opciones de why/diff
   --max-runs <n>        rendirse tras n ejecuciones (60 por defecto)
   --timeout <segundos>  por ejecución (por defecto: 5x el verde, mínimo 120)
   --offline             no descargar paquetes ni versiones de Node
+  --sandbox             ejecutar la búsqueda en una copia temporal aislada
   --rebuild             ejecutar scripts de instalación (módulos nativos) de lo restaurado
   --repeat <n>          correr cada configuración n veces; si no coinciden, cuenta como inestable
   --node <versión>      comparar con otra versión de Node.js (18, lts/hydrogen, ^20), sin verde previo
