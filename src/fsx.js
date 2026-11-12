@@ -86,3 +86,12 @@ export function checkIntegrity(file, integrity) {
 export function sriOf(file, algo = 'sha512') {
   return `${algo}-${crypto.createHash(algo).update(fs.readFileSync(file)).digest('base64')}`;
 }
+
+/** Canonical path: resolves macOS /var -> /private/var and Windows 8.3 short names (RUNNER~1). */
+export function real(p) {
+  try {
+    return fs.realpathSync.native(p);
+  } catch {
+    return path.resolve(p);
+  }
+}

@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { captureEnv } from './env.js';
 import { capture } from './exec.js';
-import { hashFile, hashText, readJson } from './fsx.js';
+import { hashFile, hashText, readJson, real } from './fsx.js';
 import { packagesFromNpmLock, readInstalled } from './packages.js';
 import { managerVersion, npmVersionFor, probeNode } from './runtime.js';
 
@@ -117,7 +117,9 @@ export async function takeSnapshot(root, env, { ignoreEnv = [] } = {}) {
 export async function takeGitSnapshot(root, current, requestedRef = null) {
   const repo = await capture('git', ['rev-parse', '--show-toplevel'], { cwd: root });
   if (!repo) return { error: 'repo' };
-  const relRoot = path.relative(repo, root);
+  // Compare canonical paths: Git may print a long path while the project path is a
+  // Windows 8.3 short name (RUNNER~1), and macOS mixes /var and /private/var.
+  const relRoot = path.relative(real(repo), real(root));
   if (relRoot.startsWith('..') || path.isAbsolute(relRoot)) return { error: 'repo' };
   const gitPath = (name) => (relRoot && relRoot !== '.' ? `${relRoot.split(path.sep).join('/')}/${name}` : name);
   const showAt = (commit, name) => capture('git', ['show', `${commit}:${gitPath(name)}`], { cwd: repo, timeoutMs: 15_000 });

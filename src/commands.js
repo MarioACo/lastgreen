@@ -3,7 +3,7 @@ import path from 'node:path';
 import { computeCoupling, computeDiff, couple, greenClosure } from './diff.js';
 import { capture, killTree, runCommand, shellJoin } from './exec.js';
 import { ensureTarballs } from './fetch.js';
-import { readJson, writeJson } from './fsx.js';
+import { readJson, real, writeJson } from './fsx.js';
 import { findCulprit } from './bisect.js';
 import { explainCulprits, failingLocations } from './explain.js';
 import { ago, factorLabel, reasonText, t } from './i18n.js';
@@ -624,8 +624,13 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
   try {
     wrong = ws.verify(current);
     if (sandbox) {
-      const variants = [executionRoot, executionRoot.replace(/\\/g, '/')];
-      const originals = [root, root.replace(/\\/g, '/')];
+      // Tools print canonical paths (macOS /private/var, Windows long names): map those too.
+      const variants = [];
+      const originals = [];
+      for (const p of new Set([executionRoot, real(executionRoot)])) {
+        variants.push(p, p.replace(/\\/g, '/'));
+        originals.push(root, root.replace(/\\/g, '/'));
+      }
       for (const [key, value] of outputs) {
         let mapped = value;
         for (let i = 0; i < variants.length; i++) mapped = mapped.split(variants[i]).join(originals[i]);

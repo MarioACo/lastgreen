@@ -19,7 +19,7 @@ inputs:
     description: Token used to read the baseline and, when enabled, comment on the PR.
     default: ${{ github.token }}
   comment-on-pr:
-    description: Create or update a diagnosis comment on pull requests (requires pull-requests: write).
+    description: 'Create or update a diagnosis comment on pull requests (requires pull-requests: write).'
     default: 'false'
 
 outputs:

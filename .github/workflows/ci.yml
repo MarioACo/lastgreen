@@ -53,3 +53,16 @@ jobs:
         env:
           LASTGREEN_REAL_YARN: '1'
           LASTGREEN_YARN_VERSION: ${{ matrix.yarn }}
+
+  yaml:
+    # action.yml and the workflows must parse: a broken action.yml breaks every user's CI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          for f in action.yml .github/workflows/*.yml .github/dependabot.yml .github/ISSUE_TEMPLATE/*.yml; do
+            npx -y js-yaml@4.1.0 "$f" > /dev/null || { echo "::error file=$f::invalid YAML"; exit 1; }
+          done
