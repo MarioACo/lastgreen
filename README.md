@@ -372,6 +372,8 @@ who pushed in the last 90 days). Early-access teams use it free during the beta.
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). To
 report a security problem, see [SECURITY.md](SECURITY.md).
 
+[![M8ven Score](https://m8ven.ai/badge/mcp/marioaco-lastgreen-6p5oac?v=638c9147c87d8864ea3a68b093b30f98)](https://m8ven.ai/mcp/marioaco-lastgreen-6p5oac?s=readme)
+
 ## License
 
 [MIT](LICENSE) © MarioACo
