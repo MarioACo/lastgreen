@@ -67,7 +67,7 @@ runs:
 
     - name: Upload the green baseline
       if: steps.run.outputs.code == '0' && github.ref_name == (inputs.baseline-branch || github.event.repository.default_branch)
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: lastgreen-baseline
         path: ${{ runner.temp }}/lastgreen-baseline/lastgreen-baseline.json
@@ -109,7 +109,7 @@ runs:
     - name: Upload the diagnosis report
       id: report-upload
       if: steps.run.outputs.code != '0' && steps.why.outputs.report != ''
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ steps.why.outputs.artifact }}
         path: ${{ steps.why.outputs.report }}
