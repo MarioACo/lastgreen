@@ -15,7 +15,7 @@ jobs:
   baseline:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: node scripts/action-demo.mjs good "$RUNNER_TEMP"
       - uses: ./
         id: lg
@@ -32,7 +32,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - shell: bash
         run: node scripts/action-demo.mjs bad "$RUNNER_TEMP"
       - uses: ./
