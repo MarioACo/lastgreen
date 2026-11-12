@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - `lastgreen why --report <file.md>` writes a shareable diagnosis with
   confidence, failure evidence, every tested configuration, reproduction data
@@ -26,8 +26,6 @@
 - `lastgreen why --sandbox` runs the complete bisect in an isolated temporary
   copy, including `node_modules`, and removes it afterwards. Test side effects
   and package swaps cannot touch the original project.
-
-## 0.3.0
 
 - **Runs on Node.js 16 and 18 too** (was 20+), so projects that still live on an
   older Node can record their green runs. Downloads no longer need `fetch`.
