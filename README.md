@@ -233,6 +233,11 @@ args = ["-y", "lastgreen", "mcp"]
   version manager (nvm, nvm-windows, fnm, volta, mise, asdf, n) or from
   nodejs.org, checked against the official SHA-256 sums.
 - **No install scripts run** unless you pass `--rebuild` (for native addons).
+- **A snapshot someone sends you can't run anything.** With `--against`, the command
+  always comes from your own project; the only shell lastgreen uses is the one that
+  runs your test command. Every npm release is built on GitHub Actions with
+  [provenance](https://docs.npmjs.com/generating-provenance-statements). Details in
+  [SECURITY.md](SECURITY.md).
 
 Sandbox telemetry is included in `why --json` under `isolation`: mode, whether
 isolation was used, file/byte counts, cache paths skipped, scan/copy time,

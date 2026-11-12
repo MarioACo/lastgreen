@@ -103,6 +103,7 @@ export async function takeSnapshot(root, env, { ignoreEnv = [] } = {}) {
     tools,
     manager: installed.manager,
     layout: installed.layout,
+    ...(installed.error ? { packageError: installed.error } : {}),
     ...(installed.pnpm ? { pnpm: installed.pnpm } : {}),
     packages: installed.packages,
     files: projectFiles(root),

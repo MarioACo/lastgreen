@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { exists, readJson } from './fsx.js';
 import { readPnpm } from './pnpm.js';
+import { readYarnPnp } from './yarnpnp.js';
 
 const DEFAULT_REGISTRIES = ['https://registry.npmjs.org/', 'https://registry.yarnpkg.com/'];
 
@@ -192,7 +193,8 @@ export function readInstalled(root) {
   const manager = detectManager(root, pkgJson);
   const direct = directDeps(pkgJson);
   if (exists(path.join(root, '.pnp.cjs')) || exists(path.join(root, '.pnp.js'))) {
-    return { manager, layout: 'pnp', packages: {} };
+    const pnp = readYarnPnp(root) ?? { packages: {} };
+    return { manager: manager ?? 'yarn', layout: 'pnp', source: pnp.error ? 'pnp-error' : 'pnp-api', packages: pnp.packages, ...(pnp.error ? { error: pnp.error } : {}) };
   }
   if (!exists(path.join(root, 'node_modules'))) return { manager, layout: 'none', packages: {} };
 

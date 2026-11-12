@@ -120,8 +120,79 @@ function pnpmFactors(green, current, { mentioned, crossPlatform }) {
   return factors;
 }
 
+function yarnGroups(snapshot) {
+  const out = new Map();
+  for (const [key, entry] of Object.entries(snapshot.packages ?? {})) {
+    if (!key.startsWith('yarn:')) continue;
+    if (!out.has(entry.name)) out.set(entry.name, []);
+    out.get(entry.name).push({ key, entry });
+  }
+  return out;
+}
+
+/** Yarn PnP: one factor per package name, materialized through resolutions. */
+function yarnFactors(green, current, { mentioned, crossPlatform }) {
+  const gb = yarnGroups(green);
+  const cb = yarnGroups(current);
+  const factors = [];
+  for (const name of [...new Set([...gb.keys(), ...cb.keys()])].sort()) {
+    const g = gb.get(name) ?? [];
+    const c = cb.get(name) ?? [];
+    const signature = (items) => [...new Set(items.map(({ entry }) => `${entry.version}\0${entry.reference}`))].sort();
+    const gs = signature(g);
+    const cs = signature(c);
+    if (gs.join('\n') === cs.join('\n')) continue;
+    const versions = (items) => [...new Set(items.map(({ entry }) => entry.version))].sort();
+    const gv = versions(g);
+    const cv = versions(c);
+    const change = g.length && c.length ? 'changed' : c.length ? 'added' : 'removed';
+    const greenDirect = g.flatMap(({ entry }) => entry.directLocations ?? []);
+    const currentDirect = c.flatMap(({ entry }) => entry.directLocations ?? []);
+    const direct = c.find(({ entry }) => entry.direct)?.entry.direct ?? g.find(({ entry }) => entry.direct)?.entry.direct ?? null;
+    const directRanges = [...new Set(greenDirect.map((loc) => loc.range))];
+    const npmReferences = [...new Set(g.map(({ entry }) => entry.reference).filter((ref) => /^npm:/.test(ref)))];
+    const resolution = npmReferences.length === 1 ? npmReferences[0] : directRanges.length === 1 ? directRanges[0] : null;
+    const factor = {
+      id: `yarn:${name}`,
+      kind: 'package',
+      name,
+      key: null,
+      parent: null,
+      change,
+      from: gv.join(' | ') || null,
+      to: cv.join(' | ') || null,
+      level: change === 'changed' && gv.length === 1 && cv.length === 1 ? versionLevel(gv[0], cv[0]) : null,
+      direct,
+      script: [...g, ...c].some(({ entry }) => entry.script),
+      yarn: {
+        green: g.map(({ key }) => key),
+        current: c.map(({ key }) => key),
+        greenDirect,
+        currentDirect,
+        resolution,
+        manifest: c[0]?.entry ?? g[0]?.entry ?? null,
+      },
+      testable: true,
+      reason: null,
+      tags: [],
+      score: 10,
+    };
+    if (crossPlatform && [...g, ...c].some(({ entry }) => platformBound(entry))) [factor.testable, factor.reason] = [false, 'platform'];
+    else if (change === 'changed' && (gv.length !== 1 || cv.length !== 1)) [factor.testable, factor.reason] = [false, 'yarn-multiple'];
+    else if (change === 'changed' && !resolution) [factor.testable, factor.reason] = [false, 'yarn-resolution'];
+    else if (change === 'added' && !currentDirect.length) [factor.testable, factor.reason] = [false, 'yarn-transitive'];
+    else if (change === 'removed' && !greenDirect.length) [factor.testable, factor.reason] = [false, 'yarn-transitive'];
+    scorePackage(factor, { level: factor.level, change, direct, mentioned });
+    factors.push(factor);
+  }
+  return factors;
+}
+
 function packageFactors(green, current, { mentioned, crossPlatform }) {
   if (green.layout === 'pnpm' && current.layout === 'pnpm') return pnpmFactors(green, current, { mentioned, crossPlatform });
+  if (green.layout === 'pnp' && current.layout === 'pnp' && green.manager === 'yarn' && current.manager === 'yarn') {
+    return yarnFactors(green, current, { mentioned, crossPlatform });
+  }
   const gp = green.packages ?? {};
   const cp = current.packages ?? {};
   const pnpm = current.layout === 'pnpm' || green.layout === 'pnpm';

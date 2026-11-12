@@ -240,6 +240,11 @@ args = ["-y", "lastgreen", "mcp"]
   nodejs.org, comprobadas con los SHA-256 oficiales.
 - **No se ejecutan scripts de instalación**, salvo que uses `--rebuild` (para
   módulos nativos).
+- **Una huella que alguien te mande no puede ejecutar nada.** Con `--against`, el
+  comando siempre sale de tu propio proyecto; la única shell que usa lastgreen es
+  la que corre tu comando de pruebas. Cada versión en npm se construye en GitHub
+  Actions con [procedencia](https://docs.npmjs.com/generating-provenance-statements).
+  Detalles en [SECURITY.md](SECURITY.md).
 
 La telemetría local del sandbox aparece en `why --json` bajo `isolation`: modo,
 si se usó aislamiento, archivos/bytes, rutas de caché omitidas, tiempos de

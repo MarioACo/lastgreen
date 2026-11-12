@@ -1,0 +1,38 @@
+name: Release
+
+# Publishing a GitHub release (vX.Y.Z) runs the tests, publishes that version to
+# npm with provenance (signed proof it was built from this repository), and
+# moves the v0 tag so every `MarioACo/lastgreen@v0` workflow gets it.
+#
+# One-time setup on npmjs.com: package lastgreen → Settings → Trusted publishing →
+# GitHub Actions, repository MarioACo/lastgreen, workflow release.yml.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Tag and package.json agree
+        run: |
+          test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
+          test "$(node -p "require('./server.json').version")" = "$(node -p "require('./package.json').version")"
+      - run: node --test
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
+      - name: Move v0 to this release
+        run: |
+          git tag -f v0 "${GITHUB_REF_NAME}^{}"
+          git push -f origin v0

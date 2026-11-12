@@ -91,6 +91,25 @@ test('diff: snapshots from another platform do not test platform-specific packag
   assert.equal(diff.factors.find((f) => f.kind === 'env').reason, 'other-machine');
 });
 
+test('diff: Yarn PnP changes are testable only when resolutions are exact', () => {
+  const sys = { machine: 'm', platform: 'linux', arch: 'x64', release: '1' };
+  const snap = (packages) => ({ system: sys, manager: 'yarn', layout: 'pnp', node: { version: 'v20.0.0' }, packages, env: {}, files: {}, home: {}, tools: {} });
+  const green = snap({
+    'yarn:alpha@npm:1.0.0': { name: 'alpha', version: '1.0.0', reference: 'npm:1.0.0', direct: 'prod', directLocations: [{ manifest: 'package.json', field: 'dependencies', range: '^1.0.0' }] },
+  });
+  const current = snap({
+    'yarn:alpha@npm:1.1.0': { name: 'alpha', version: '1.1.0', reference: 'npm:1.1.0', direct: 'prod', directLocations: [{ manifest: 'package.json', field: 'dependencies', range: '^1.1.0' }] },
+    'yarn:transitive@npm:2.0.0': { name: 'transitive', version: '2.0.0', reference: 'npm:2.0.0', directLocations: [] },
+  });
+  const diff = computeDiff(green, current);
+  const alpha = diff.factors.find((factor) => factor.name === 'alpha');
+  const transitive = diff.factors.find((factor) => factor.name === 'transitive');
+  assert.equal(alpha.testable, true);
+  assert.equal(alpha.yarn.resolution, 'npm:1.0.0');
+  assert.equal(transitive.testable, false);
+  assert.equal(transitive.reason, 'yarn-transitive');
+});
+
 test('versionLevel treats 0.x minor bumps as breaking', () => {
   assert.equal(versionLevel('1.2.3', '2.0.0'), 'major');
   assert.equal(versionLevel('0.3.1', '0.4.0'), 'major');

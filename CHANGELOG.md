@@ -37,6 +37,14 @@
   works even without a green run (a fresh clone on the wrong Node is enough).
 - `--node <version>`: compare with any Node.js version (`18`, `lts/hydrogen`,
   `^20`), preferring one already installed, otherwise an official verified build.
+- MCP tools declare their annotations (read-only, destructive, idempotent, open-world).
+- **Security:** a snapshot from someone else (`--against`) can never choose the
+  command that runs; only your config, package.json or `--command` do. The only
+  shell lastgreen uses is the one that runs your own test command: npm, package
+  managers and installs are started without a shell. Documented in SECURITY.md.
+- Releases are published from GitHub Actions with npm provenance; CodeQL and
+  Dependabot watch the repository.
+- Listed in the official MCP Registry as `io.github.MarioACo/lastgreen` (`server.json`).
 - Nested runs are safe: a wrapped test script re-run during a bisect does not
   record snapshots.
 

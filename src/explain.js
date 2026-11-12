@@ -256,7 +256,7 @@ function packageDir(factor, root, current) {
 export async function packageNotes(factor, { root, current, cacheDir, offline, env = process.env, words = new Set(), boost = () => 0 }) {
   if (factor.change !== 'changed' || !factor.from || !factor.to) return null;
   const dir = packageDir(factor, root, current);
-  const pkg = dir ? readJson(path.join(dir, 'package.json')) : null;
+  const pkg = dir ? readJson(path.join(dir, 'package.json')) : factor.yarn?.manifest ?? null;
   // 1. A changelog shipped inside the package.
   if (dir) {
     let files = [];

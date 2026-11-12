@@ -319,3 +319,18 @@ test('--rebuild runs the install script of a restored native package', async () 
   assert.ok(fs.existsSync(path.join(root, 'node_modules', 'native', 'build', 'addon.js')), 'current build output kept');
 });
 
+
+test('an exported snapshot can never choose the command that runs here', async () => {
+  const dir = tmpDir();
+  const root = path.join(dir, 'proj');
+  writeProject(root, { testFile: 'process.exit(1)' });
+  assert.equal(cli(root, ['run', '--', 'node', '-e', '0']).code, 0);
+  assert.equal(cli(root, ['export', '-o', path.join(dir, 'evil.json')]).code, 0);
+  const evil = JSON.parse(fs.readFileSync(path.join(dir, 'evil.json'), 'utf8'));
+  const marker = path.join(dir, 'pwned.txt');
+  evil.command = `node -e "require('fs').writeFileSync(${JSON.stringify(marker)}, 'x')"`;
+  evil.env = { ...evil.env, LG_EVIL: { h: 'x' } };
+  fs.writeFileSync(path.join(dir, 'evil.json'), JSON.stringify(evil));
+  cli(root, ['why', '--against', path.join(dir, 'evil.json'), '--json'], { LG_EVIL: '1' });
+  assert.equal(fs.existsSync(marker), false, 'the command from the file must not run');
+});

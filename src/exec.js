@@ -36,6 +36,11 @@ export function killTree(child) {
 }
 
 /**
+ * The one place lastgreen uses a shell, on purpose: it runs the test command
+ * the user configured (`npm test`, `vitest run && eslint .`) exactly as their own
+ * shell would. That command comes from the user's own package.json, CLI flag or
+ * snapshot, never from downloaded data. Everything else (npm, git, node, package
+ * managers) is spawned without a shell.
  * @param {string} command shell command line
  * @param {{cwd?: string, env?: NodeJS.ProcessEnv, tee?: boolean, timeoutMs?: number, onChild?: (child: import('node:child_process').ChildProcess|null) => void}} options
  * @returns {Promise<{code: number|null, signal: string|null, durationMs: number, tail: string, timedOut: boolean, error?: string}>}
@@ -123,6 +128,28 @@ export function capture(file, args, { cwd, env = process.env, timeoutMs = 10_000
     child.on('close', (code) => {
       clearTimeout(timer);
       resolve(code === 0 ? out.trim() : null);
+    });
+  });
+}
+
+/** Run an executable with arguments, no shell, output shown live. */
+export function runFile(file, args, { cwd, env = process.env, timeoutMs = 0 } = {}) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(file, args, { cwd, env, stdio: 'inherit', windowsHide: true });
+    } catch (err) {
+      resolve({ code: null, error: err.message });
+      return;
+    }
+    const timer = timeoutMs > 0 ? setTimeout(() => killTree(child), timeoutMs) : null;
+    child.on('error', (err) => {
+      if (timer) clearTimeout(timer);
+      resolve({ code: null, error: err.message });
+    });
+    child.on('close', (code) => {
+      if (timer) clearTimeout(timer);
+      resolve({ code });
     });
   });
 }

@@ -46,11 +46,45 @@ export function npmVersionFor(nodePath) {
   return readJson(path.join(path.dirname(cli), '..', 'package.json'))?.version ?? null;
 }
 
+/** Every match for an executable on PATH (Windows: .exe/.cmd/.bat), without a shell. */
+export function findOnPath(name, env = process.env) {
+  const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH';
+  const exts = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : [''];
+  const out = [];
+  for (const dir of String(env[key] ?? '').split(path.delimiter).filter(Boolean)) {
+    for (const ext of exts) {
+      const file = path.join(dir, name + ext);
+      try {
+        if (fs.statSync(file).isFile()) out.push(file);
+      } catch {}
+    }
+  }
+  return out;
+}
+
+/**
+ * Version of pnpm / yarn / bun, with no shell involved: pnpm records itself in
+ * node_modules/.modules.yaml; a .cmd shim is read from the package.json next to
+ * it; a real executable is run directly.
+ */
 export async function managerVersion(manager, env, cwd) {
   if (!manager || manager === 'npm') return null;
-  // Windows needs the shell for .cmd shims; pass one command string so nothing is concatenated unescaped.
-  if (process.platform === 'win32') return capture(`${manager} --version`, [], { env, cwd, shell: true, timeoutMs: 15_000 });
-  return capture(manager, ['--version'], { env, cwd, timeoutMs: 15_000 });
+  if (manager === 'pnpm') {
+    try {
+      const yaml = fs.readFileSync(path.join(cwd, 'node_modules', '.modules.yaml'), 'utf8');
+      const m = /packageManager:\s*["']?pnpm@([^\s"']+)/.exec(yaml);
+      if (m) return m[1];
+    } catch {}
+  }
+  for (const file of findOnPath(manager, env)) {
+    if (/\.(cmd|bat)$/i.test(file)) {
+      const pj = readJson(path.join(path.dirname(file), 'node_modules', manager, 'package.json'));
+      if (pj?.version) return pj.version;
+      continue;
+    }
+    return capture(file, ['--version'], { env, cwd, timeoutMs: 15_000 });
+  }
+  return null;
 }
 
 export function nodeCandidates(version, env = process.env, cacheDir) {

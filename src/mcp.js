@@ -18,6 +18,7 @@ export const TOOLS = [
   {
     name: 'lastgreen_record',
     title: 'Run tests and remember the environment',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description:
       'Run the test command through lastgreen. If it passes, the environment (installed packages, Node version, env vars) is saved as the last green state; if it fails, it is saved as red. Call this once while tests pass so later failures can be explained.',
     inputSchema: {
@@ -28,6 +29,7 @@ export const TOOLS = [
   {
     name: 'lastgreen_diff',
     title: 'What changed outside the code',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
       'List everything outside the source code that changed since the tests last passed: package versions, Node.js version, environment variables, config files, git commits. Runs nothing. Use it first when tests that used to pass now fail.',
     inputSchema: {
@@ -38,6 +40,7 @@ export const TOOLS = [
   {
     name: 'lastgreen_why',
     title: 'Find and confirm the culprit',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     description:
       'Find which environment change broke the tests and confirm it: re-runs the test command in an isolated temporary copy with parts of the last green environment put back (delta debugging). Returns the culprit, how it was confirmed and the exact fix command. Prefer this over guessing from error messages when tests passed before and the code did not change.',
     inputSchema: {

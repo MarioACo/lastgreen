@@ -22,14 +22,11 @@ function runNpmPack(specs, { cwd, env, nodePath, dest }) {
   return new Promise((resolve) => {
     const cli = npmCliFor(nodePath);
     const args = ['pack', ...specs, '--pack-destination', dest, '--json', '--ignore-scripts', '--loglevel=error'];
-    let child;
-    if (cli) {
-      child = spawn(nodePath, [cli, ...args], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    } else {
-      // Fallback through the shell: only for specs that passed SPEC_RE (no shell metacharacters).
-      if (!specs.every((s) => SPEC_RE.test(s))) return resolve({ ok: false, error: 'npm not found' });
-      child = spawn('npm', args, { cwd, env, shell: true, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    }
+    // npm's own JS entry point, run by node directly: no shell, so nothing in a
+    // spec can ever be interpreted as a command.
+    if (!cli) return resolve({ ok: false, error: 'npm not found' });
+    if (!specs.every((s) => SPEC_RE.test(s) || /^(git\+|git:|github:|https?:\/\/)\S+$/.test(s))) return resolve({ ok: false, error: 'unexpected package spec' });
+    const child = spawn(nodePath, [cli, ...args], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let out = '';
     let err = '';
     child.stdout.on('data', (c) => (out += c));

@@ -83,6 +83,7 @@ runs:
         LG: ${{ github.action_path }}/bin/lastgreen.js
         GH_TOKEN: ${{ inputs.github-token }}
         LASTGREEN_GITHUB_TOKEN: ${{ inputs.github-token }}
+        CMD: ${{ inputs.command }}
         BRANCH: ${{ inputs.baseline-branch || github.event.repository.default_branch }}
       run: |
         dir="$RUNNER_TEMP/lastgreen-download"
@@ -98,7 +99,7 @@ runs:
         unzip -o -q "$dir/baseline.zip" -d "$dir"
         unset GH_TOKEN GITHUB_TOKEN
         set +e
-        node "$LG" --lang en why --against "$dir/lastgreen-baseline.json" --report "$dir/lastgreen-report.md" --json > "$dir/why.json"
+        node "$LG" --lang en why --against "$dir/lastgreen-baseline.json" --command "$CMD" --report "$dir/lastgreen-report.md" --json > "$dir/why.json"
         status=$(node -e "try { console.log(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).status) } catch { console.log('error') }" "$dir/why.json")
         echo "status=$status" >> "$GITHUB_OUTPUT"
         echo "report=$dir/lastgreen-report.md" >> "$GITHUB_OUTPUT"

@@ -60,6 +60,8 @@ test('MCP: handshake, tool list, and lastgreen_why finds the culprit for an agen
 
   const list = await mcp.request('tools/list', {});
   assert.deepEqual(list.result.tools.map((t) => t.name), ['lastgreen_record', 'lastgreen_diff', 'lastgreen_why']);
+  assert.equal(list.result.tools.find((t) => t.name === 'lastgreen_diff').annotations.readOnlyHint, true);
+  assert.ok(list.result.tools.every((t) => t.annotations && t.annotations.destructiveHint === false));
 
   const rec = await mcp.request('tools/call', { name: 'lastgreen_record', arguments: { command: 'node test.js' } });
   assert.match(rec.result.content[0].text, /Exit code 0/);

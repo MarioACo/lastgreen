@@ -5,7 +5,8 @@
 //   - prints how to connect Claude Code, Codex or Cursor (MCP)
 import fs from 'node:fs';
 import path from 'node:path';
-import { capture, runCommand } from './exec.js';
+import { capture, runFile } from './exec.js';
+import { findOnPath, npmCliFor } from './runtime.js';
 import { exists } from './fsx.js';
 import { t } from './i18n.js';
 import { detectManager } from './packages.js';
@@ -29,6 +30,35 @@ export function unwrapTestScript(script, config) {
   const bare = /^\s*(?:npx\s+(?:-y\s+)?)?lastgreen\s+run\s+--\s+(.+)$/.exec(script ?? '');
   if (bare) return bare[1];
   return config?.command ?? null;
+}
+
+const INSTALL_ARGS = {
+  npm: (spec) => ['install', '--save-dev', spec],
+  pnpm: (spec) => ['add', '--save-dev', spec],
+  yarn: (spec) => ['add', '--dev', spec],
+  bun: (spec) => ['add', '--dev', spec],
+};
+
+/**
+ * Install the devDependency without a shell: npm and the JS entry points of
+ * pnpm/yarn run through node; a native executable (bun, standalone pnpm) runs directly.
+ */
+async function runInstall(manager, spec, root) {
+  const pm = INSTALL_ARGS[manager] ? manager : 'npm';
+  const args = INSTALL_ARGS[pm](spec);
+  if (pm === 'npm') {
+    const cli = npmCliFor(process.execPath) ?? npmCliFor(findOnPath('node')[0]);
+    return cli ? runFile(process.execPath, [cli, ...args], { cwd: root, timeoutMs: 180_000 }) : { code: null, error: 'npm not found' };
+  }
+  const found = findOnPath(pm)[0];
+  if (!found) return { code: null, error: `${pm} not found` };
+  if (/.(cmd|bat)$/i.test(found)) {
+    const entry = { pnpm: 'bin/pnpm.cjs', yarn: 'bin/yarn.js' }[pm];
+    const js = entry && path.join(path.dirname(found), 'node_modules', pm, entry);
+    if (!js || !exists(js)) return { code: null, error: `cannot run ${found} without a shell` };
+    return runFile(process.execPath, [js, ...args], { cwd: root, timeoutMs: 180_000 });
+  }
+  return runFile(found, args, { cwd: root, timeoutMs: 180_000 });
 }
 
 const INSTALL_DEV = {
@@ -156,7 +186,7 @@ export async function cmdInit(opts, UserError) {
     say(`  ${sym.arrow} ${t('initInstallLater')} ${c.cyan(install)}`);
   } else {
     say(c.dim(`  ${t('initInstalling', install)}`));
-    const r = await runCommand(install, { cwd: root, timeoutMs: 180_000 });
+    const r = await runInstall(manager, `lastgreen@^${VERSION}`, root);
     if (r.code === 0) say(`  ${c.green(sym.ok)} ${t('initInstalled')}`);
     else {
       rollbackConfig();

@@ -15,7 +15,8 @@
     "README.md",
     "README.es.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "server.json"
   ],
   "engines": {
     "node": ">=16"
@@ -51,5 +52,6 @@
   "bugs": {
     "url": "https://github.com/MarioACo/lastgreen/issues"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "mcpName": "io.github.MarioACo/lastgreen"
 }
