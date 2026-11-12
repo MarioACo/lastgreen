@@ -625,15 +625,16 @@ export async function cmdWhy(opts, { dryRun = false } = {}) {
     wrong = ws.verify(current);
     if (sandbox) {
       // Tools print canonical paths (macOS /private/var, Windows long names): map those too.
-      const variants = [];
-      const originals = [];
+      // Longest first: on macOS /var/folders/x is a substring of /private/var/folders/x,
+      // and replacing the short one first would leave "/private" + project path.
+      const pairs = [];
       for (const p of new Set([executionRoot, real(executionRoot)])) {
-        variants.push(p, p.replace(/\\/g, '/'));
-        originals.push(root, root.replace(/\\/g, '/'));
+        pairs.push([p, root], [p.replace(/\\/g, '/'), root.replace(/\\/g, '/')]);
       }
+      pairs.sort((a, b) => b[0].length - a[0].length);
       for (const [key, value] of outputs) {
         let mapped = value;
-        for (let i = 0; i < variants.length; i++) mapped = mapped.split(variants[i]).join(originals[i]);
+        for (const [from, to] of pairs) mapped = mapped.split(from).join(to);
         outputs.set(key, mapped);
       }
     }

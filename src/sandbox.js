@@ -178,7 +178,12 @@ export function createSandbox(root, { tempRoot = os.tmpdir(), availableBytes, co
     err.details = { ...estimate, scanMs, availableBytes: available, requiredBytes: required };
     throw err;
   }
-  const resolvedTemp = path.resolve(tempRoot);
+  // Canonical temp dir (macOS /var -> /private/var, Windows short names), so the
+  // paths tools print inside the sandbox match ours and map back to the project.
+  let resolvedTemp = path.resolve(tempRoot);
+  try {
+    resolvedTemp = fs.realpathSync.native(resolvedTemp);
+  } catch {}
   const base = fs.mkdtempSync(path.join(resolvedTemp, PREFIX));
   const sandboxRoot = path.join(base, 'project');
   let live = true;
